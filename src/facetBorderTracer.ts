@@ -2,6 +2,7 @@ import { delay } from "./common";
 import { Point } from "./structs/point";
 import { BooleanArray2D } from "./structs/typedarrays";
 import { FacetResult, PathPoint, OrientationEnum, Facet } from "./facetmanagement";
+import { isInBounds } from "./lib/boundaryUtils";
 
 export class FacetBorderTracer {
     
@@ -44,16 +45,16 @@ export class FacetBorderTracer {
                 // determine the starting point orientation (the outside of facet)
                 const pt = new PathPoint(f.borderPoints[borderStartIndex], OrientationEnum.Left);
                 // L T R B
-                if (pt.x - 1 < 0 || facetResult.facetMap.get(pt.x - 1, pt.y) !== f.id) {
+                if (!isInBounds(pt.x - 1, pt.y, facetResult.width, facetResult.height) || facetResult.facetMap.get(pt.x - 1, pt.y) !== f.id) {
                     pt.orientation = OrientationEnum.Left;
                 }
-                else if (pt.y - 1 < 0 || facetResult.facetMap.get(pt.x, pt.y - 1) !== f.id) {
+                else if (!isInBounds(pt.x, pt.y - 1, facetResult.width, facetResult.height) || facetResult.facetMap.get(pt.x, pt.y - 1) !== f.id) {
                     pt.orientation = OrientationEnum.Top;
                 }
-                else if (pt.x + 1 >= facetResult.width || facetResult.facetMap.get(pt.x + 1, pt.y) !== f.id) {
+                else if (!isInBounds(pt.x + 1, pt.y, facetResult.width, facetResult.height) || facetResult.facetMap.get(pt.x + 1, pt.y) !== f.id) {
                     pt.orientation = OrientationEnum.Right;
                 }
-                else if (pt.y + 1 >= facetResult.height || facetResult.facetMap.get(pt.x, pt.y + 1) !== f.id) {
+                else if (!isInBounds(pt.x, pt.y + 1, facetResult.width, facetResult.height) || facetResult.facetMap.get(pt.x, pt.y + 1) !== f.id) {
                     pt.orientation = OrientationEnum.Bottom;
                 }
                 // build a border path from that point

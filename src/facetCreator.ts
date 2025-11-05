@@ -1,5 +1,6 @@
 import { delay, IMap, RGB } from "./common";
 import { fill } from "./lib/fill";
+import { getNeighbors4 } from "./lib/boundaryUtils";
 import { BoundingBox } from "./structs/boundingbox";
 import { Point } from "./structs/point";
 import { BooleanArray2D, Uint32Array2D, Uint8Array2D } from "./structs/typedarrays";
@@ -149,28 +150,12 @@ export class FacetCreator {
         facet.neighbourFacets = [];
         const uniqueFacets: IMap<boolean> = {}; // poor man's set
         for (const pt of facet.borderPoints) {
-            if (pt.x - 1 >= 0) {
-                const leftFacetId = facetResult.facetMap.get(pt.x - 1, pt.y);
-                if (leftFacetId !== facet.id) {
-                    uniqueFacets[leftFacetId] = true;
-                }
-            }
-            if (pt.y - 1 >= 0) {
-                const topFacetId = facetResult.facetMap.get(pt.x, pt.y - 1);
-                if (topFacetId !== facet.id) {
-                    uniqueFacets[topFacetId] = true;
-                }
-            }
-            if (pt.x + 1 < facetResult.width) {
-                const rightFacetId = facetResult.facetMap.get(pt.x + 1, pt.y);
-                if (rightFacetId !== facet.id) {
-                    uniqueFacets[rightFacetId] = true;
-                }
-            }
-            if (pt.y + 1 < facetResult.height) {
-                const bottomFacetId = facetResult.facetMap.get(pt.x, pt.y + 1);
-                if (bottomFacetId !== facet.id) {
-                    uniqueFacets[bottomFacetId] = true;
+            // Get all 4-connected neighbors within bounds
+            const neighbors = getNeighbors4(pt.x, pt.y, facetResult.width, facetResult.height);
+            for (const neighbor of neighbors) {
+                const neighborFacetId = facetResult.facetMap.get(neighbor.x, neighbor.y);
+                if (neighborFacetId !== facet.id) {
+                    uniqueFacets[neighborFacetId] = true;
                 }
             }
         }
