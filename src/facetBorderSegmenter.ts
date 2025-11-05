@@ -1,6 +1,7 @@
 import { delay } from "./common";
 import { Point } from "./structs/point";
 import { FacetResult, PathPoint, OrientationEnum } from "./facetmanagement";
+import { FACET_THRESHOLDS, SEGMENTATION_CONSTANTS, UPDATE_INTERVALS } from "./lib/constants";
 
 
 /**
@@ -31,7 +32,7 @@ export class FacetBorderSegmenter {
      *  While border paths are all nice and fancy, they are not linked to neighbour facets
      *  So any change in the paths makes a not so nice gap between the facets, which makes smoothing them out impossible
      */
-    public static async buildFacetBorderSegments(facetResult: FacetResult, nrOfTimesToHalvePoints: number = 2, onUpdate: ((progress: number) => void) | null = null) {
+    public static async buildFacetBorderSegments(facetResult: FacetResult, nrOfTimesToHalvePoints: number = SEGMENTATION_CONSTANTS.DEFAULT_HALVE_ITERATIONS, onUpdate: ((progress: number) => void) | null = null) {
         // first chop up the border path in segments each time the neighbour at that point changes
         // (and sometimes even when it doesn't on that side but does on the neighbour's side)
         const segmentsPerFacet: Array<Array<PathSegment | null>> = FacetBorderSegmenter.prepareSegmentsPerFacet(facetResult);
@@ -166,7 +167,7 @@ export class FacetBorderSegmenter {
      *  because they are unneeded.
      */
     private static reduceSegmentHaarWavelet(newpath: PathPoint[], skipOutsideBorders: boolean, width: number, height: number) {
-        if (newpath.length <= 5) {
+        if (newpath.length <= FACET_THRESHOLDS.MIN_PATH_LENGTH_FOR_REDUCTION) {
             return newpath;
         }
         const reducedPath: PathPoint[] = [];
@@ -210,7 +211,7 @@ export class FacetBorderSegmenter {
      */
     private static async matchSegmentsWithNeighbours(facetResult: FacetResult, segmentsPerFacet: Array<Array<PathSegment | null>>, onUpdate: ((progress: number) => void) | null = null) {
         // max distance of the start/end points of the segment that it can be before the segments don't match up
-        const MAX_DISTANCE = 4;
+        const MAX_DISTANCE = SEGMENTATION_CONSTANTS.MAX_SEGMENT_MATCH_DISTANCE;
         // reserve room
         for (const f of facetResult.facets) {
             if (f != null) {
@@ -304,7 +305,7 @@ export class FacetBorderSegmenter {
                     // clear the current segment so it can't be processed again when processing the neighbour facet
                     segmentsPerFacet[f.id][s] = null;
                 }
-                if (count % 100 === 0) {
+                if (count % UPDATE_INTERVALS.BATCH_UPDATE_FREQUENCY === 0) {
                     await delay(0);
                     if (onUpdate != null) {
                         onUpdate(f.id / facetResult.facets.length);

@@ -7,6 +7,7 @@ import { hslToRgb, lab2rgb, rgb2lab, rgbToHsl } from "./lib/colorconversion";
 import { ClusteringColorSpace, Settings } from "./settings";
 import { Uint8Array2D } from "./structs/typedarrays";
 import { Random } from "./random";
+import { BIT_CONSTANTS, UPDATE_INTERVALS, RANDOM_SEED_CONSTANTS } from "./lib/constants";
 
 export class ColorMapResult {
     public imgColorIndices!: Uint8Array2D;
@@ -65,7 +66,7 @@ export class ColorReducer {
         let idx = 0;
         let vIdx = 0;
 
-        const bitsToChopOff = 2; // r,g,b gets rounded to every 4 values, 0,4,8,...
+        const bitsToChopOff = BIT_CONSTANTS.BITS_TO_CHOP_OFF; // r,g,b gets rounded to every 4 values, 0,4,8,...
 
         // group by color, add points as 1D index to prevent Point object allocation
         const pointsByColor: IMap<number[]> = {};
@@ -114,7 +115,7 @@ export class ColorReducer {
             vectors[vIdx++] = vec;
         }
 
-        const random = new Random(settings.randomSeed === 0 ? new Date().getTime() : settings.randomSeed);
+        const random = new Random(settings.randomSeed === RANDOM_SEED_CONSTANTS.USE_CURRENT_TIME ? new Date().getTime() : settings.randomSeed);
         // vectors of all the unique colors are built, time to cluster them
         const kmeans = new KMeans(vectors, settings.kMeansNrOfClusters, random);
 
@@ -124,8 +125,8 @@ export class ColorReducer {
         while (kmeans.currentDeltaDistanceDifference > settings.kMeansMinDeltaDifference) {
             kmeans.step();
 
-            // update GUI every 500ms
-            if (new Date().getTime() - curTime > 500) {
+            // update GUI at regular intervals
+            if (new Date().getTime() - curTime > UPDATE_INTERVALS.PROGRESS_UPDATE_MS) {
                 curTime = new Date().getTime();
 
                 await delay(0);
