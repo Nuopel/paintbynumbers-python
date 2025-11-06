@@ -1,12 +1,14 @@
 import { delay, IMap, RGB } from "./common";
-import { fill } from "./lib/fill";
-import { BoundingBox } from "./structs/boundingbox";
+import { getNeighbors4 } from "./lib/boundaryUtils";
+import { FacetBuilder } from "./lib/FacetBuilder";
 import { Point } from "./structs/point";
 import { BooleanArray2D, Uint32Array2D, Uint8Array2D } from "./structs/typedarrays";
 import { FacetResult, Facet } from "./facetmanagement";
 import { FacetReducer } from "./facetReducer";
 
 export class FacetCreator {
+    private static builder: FacetBuilder = new FacetBuilder();
+
     /**
      *  Constructs the facets with its border points for each area of pixels of the same color
      */
@@ -26,8 +28,8 @@ export class FacetCreator {
                 const colorIndex = imgColorIndices.get(i, j);
                 if (!visited.get(i, j)) {
                     const facetIndex = result.facets.length;
-                    // build a facet starting at point i,j
-                    const facet = FacetCreator.buildFacet(facetIndex, colorIndex, i, j, visited, imgColorIndices, result);
+                    // build a facet starting at point i,j using FacetBuilder
+                    const facet = FacetCreator.builder.buildFacet(facetIndex, colorIndex, i, j, visited, imgColorIndices, result);
                     result.facets.push(facet);
                     if (count % 100 === 0) {
                         await delay(0);
@@ -54,92 +56,10 @@ export class FacetCreator {
 
     /**
      *  Builds a facet at given x,y using depth first search to visit all pixels of the same color
+     *  @deprecated Use FacetBuilder.buildFacet() instead. Kept for backward compatibility.
      */
     public static buildFacet(facetIndex: number, facetColorIndex: number, x: number, y: number, visited: BooleanArray2D, imgColorIndices: Uint8Array2D, facetResult: FacetResult) {
-        const facet = new Facet();
-        facet.id = facetIndex;
-        facet.color = facetColorIndex;
-        facet.bbox = new BoundingBox();
-        facet.borderPoints = [];
-        
-        facet.neighbourFacetsIsDirty = true; // not built neighbours yet
-        facet.neighbourFacets = null;
-
-        fill(x, y, facetResult.width, facetResult.height, (ptx, pty) => visited.get(ptx, pty) || imgColorIndices.get(ptx, pty) !== facetColorIndex, (ptx, pty) => {
-            visited.set(ptx, pty, true);
-            facetResult.facetMap.set(ptx, pty, facetIndex);
-            facet.pointCount++;
-            // determine if the point is a border or not
-            /*  const isInnerPoint = (ptx - 1 >= 0 && imgColorIndices.get(ptx - 1, pty) === facetColorIndex) &&
-                  (pty - 1 >= 0 && imgColorIndices.get(ptx, pty - 1) === facetColorIndex) &&
-                  (ptx + 1 < facetResult.width && imgColorIndices.get(ptx + 1, pty) === facetColorIndex) &&
-                  (pty + 1 < facetResult.height && imgColorIndices.get(ptx, pty + 1) === facetColorIndex);
-            */
-            const isInnerPoint = imgColorIndices.matchAllAround(ptx, pty, facetColorIndex);
-            if (!isInnerPoint) {
-                facet.borderPoints.push(new Point(ptx, pty));
-            }
-            // update bounding box of facet
-            if (ptx > facet.bbox.maxX) {
-                facet.bbox.maxX = ptx;
-            }
-            if (pty > facet.bbox.maxY) {
-                facet.bbox.maxY = pty;
-            }
-            if (ptx < facet.bbox.minX) {
-                facet.bbox.minX = ptx;
-            }
-            if (pty < facet.bbox.minY) {
-                facet.bbox.minY = pty;
-            }
-        });
-        /*
-           // using a 1D flattened stack (x*width+y), we can avoid heap allocations of Point objects, which halves the garbage collection time
-         let stack: number[] = [];
-         stack.push(y * facetResult.width + x);
-
-         while (stack.length > 0) {
-             let pt = stack.pop()!;
-             let ptx = pt % facetResult.width;
-             let pty = Math.floor(pt / facetResult.width);
-
-             // if the point wasn't visited before and matches
-             // the same color
-             if (!visited.get(ptx, pty) &&
-                 imgColorIndices.get(ptx, pty) == facetColorIndex) {
-
-                 visited.set(ptx, pty, true);
-                 facetResult.facetMap.set(ptx, pty, facetIndex);
-                 facet.pointCount++;
-
-                 // determine if the point is a border or not
-                 let isInnerPoint = (ptx - 1 >= 0 && imgColorIndices.get(ptx - 1, pty) == facetColorIndex) &&
-                     (pty - 1 >= 0 && imgColorIndices.get(ptx, pty - 1) == facetColorIndex) &&
-                     (ptx + 1 < facetResult.width && imgColorIndices.get(ptx + 1, pty) == facetColorIndex) &&
-                     (pty + 1 < facetResult.height && imgColorIndices.get(ptx, pty + 1) == facetColorIndex);
-
-                 if (!isInnerPoint)
-                     facet.borderPoints.push(new Point(ptx, pty));
-
-                 // update bounding box of facet
-                 if (ptx > facet.bbox.maxX) facet.bbox.maxX = ptx;
-                 if (pty > facet.bbox.maxY) facet.bbox.maxY = pty;
-                 if (ptx < facet.bbox.minX) facet.bbox.minX = ptx;
-                 if (pty < facet.bbox.minY) facet.bbox.minY = pty;
-
-                 // visit direct adjacent points
-                 if (ptx - 1 >= 0 && !visited.get(ptx - 1, pty))
-                     stack.push(pty * facetResult.width + (ptx - 1)); //stack.push(new Point(pt.x - 1, pt.y));
-                 if (pty - 1 >= 0 && !visited.get(ptx, pty - 1))
-                     stack.push((pty - 1) * facetResult.width + ptx); //stack.push(new Point(pt.x, pt.y - 1));
-                 if (ptx + 1 < facetResult.width && !visited.get(ptx + 1, pty))
-                     stack.push(pty * facetResult.width + (ptx + 1));//stack.push(new Point(pt.x + 1, pt.y));
-                 if (pty + 1 < facetResult.height && !visited.get(ptx, pty + 1))
-                     stack.push((pty + 1) * facetResult.width + ptx); //stack.push(new Point(pt.x, pt.y + 1));
-             }
-         }
-         */
-        return facet;
+        return FacetCreator.builder.buildFacet(facetIndex, facetColorIndex, x, y, visited, imgColorIndices, facetResult);
     }
 
     /**
@@ -149,28 +69,12 @@ export class FacetCreator {
         facet.neighbourFacets = [];
         const uniqueFacets: IMap<boolean> = {}; // poor man's set
         for (const pt of facet.borderPoints) {
-            if (pt.x - 1 >= 0) {
-                const leftFacetId = facetResult.facetMap.get(pt.x - 1, pt.y);
-                if (leftFacetId !== facet.id) {
-                    uniqueFacets[leftFacetId] = true;
-                }
-            }
-            if (pt.y - 1 >= 0) {
-                const topFacetId = facetResult.facetMap.get(pt.x, pt.y - 1);
-                if (topFacetId !== facet.id) {
-                    uniqueFacets[topFacetId] = true;
-                }
-            }
-            if (pt.x + 1 < facetResult.width) {
-                const rightFacetId = facetResult.facetMap.get(pt.x + 1, pt.y);
-                if (rightFacetId !== facet.id) {
-                    uniqueFacets[rightFacetId] = true;
-                }
-            }
-            if (pt.y + 1 < facetResult.height) {
-                const bottomFacetId = facetResult.facetMap.get(pt.x, pt.y + 1);
-                if (bottomFacetId !== facet.id) {
-                    uniqueFacets[bottomFacetId] = true;
+            // Get all 4-connected neighbors within bounds
+            const neighbors = getNeighbors4(pt.x, pt.y, facetResult.width, facetResult.height);
+            for (const neighbor of neighbors) {
+                const neighborFacetId = facetResult.facetMap.get(neighbor.x, neighbor.y);
+                if (neighborFacetId !== facet.id) {
+                    uniqueFacets[neighborFacetId] = true;
                 }
             }
         }

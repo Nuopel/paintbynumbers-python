@@ -3,6 +3,7 @@ import { delay, IMap, RGB } from "./common";
 import { FacetCreator } from "./facetCreator";
 import { Facet, FacetResult } from "./facetmanagement";
 import { BooleanArray2D, Uint8Array2D } from "./structs/typedarrays";
+import { UPDATE_INTERVALS } from "./lib/constants";
 
 export class FacetReducer {
 
@@ -32,7 +33,7 @@ export class FacetReducer {
             if (f != null && f.pointCount < smallerThan) {
                 FacetReducer.deleteFacet(f.id, facetResult, imgColorIndices, colorDistances, visitedCache);
 
-                if (new Date().getTime() - curTime > 500) {
+                if (new Date().getTime() - curTime > UPDATE_INTERVALS.PROGRESS_UPDATE_MS) {
                     curTime = new Date().getTime();
                     await delay(0);
                     if (onUpdate != null) {
@@ -63,7 +64,7 @@ export class FacetReducer {
             FacetReducer.deleteFacet(facetToRemove!.id, facetResult, imgColorIndices, colorDistances, visitedCache);
             facetCount = facetResult.facets.filter(f => f != null).length;
 
-            if (new Date().getTime() - curTime > 500) {
+            if (new Date().getTime() - curTime > UPDATE_INTERVALS.PROGRESS_UPDATE_MS) {
                 curTime = new Date().getTime();
                 await delay(0);
                 if (onUpdate != null) {

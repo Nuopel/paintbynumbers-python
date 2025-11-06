@@ -13,6 +13,7 @@ import { FacetReducer } from "./facetReducer";
 import { time, timeEnd } from "./gui";
 import { Settings } from "./settings";
 import { Point } from "./structs/point";
+import { CLUSTERING_DEFAULTS, UPDATE_INTERVALS, SVG_CONSTANTS } from "./lib/constants";
 
 export class ProcessResult {
     public facetResult!: FacetResult;
@@ -126,7 +127,8 @@ export class GUIProcessManager {
         $(".status.kMeans").addClass("active");
 
         await ColorReducer.applyKMeansClustering(imgData, kmeansImgData, ctx, settings, (kmeans) => {
-            const progress = (100 - (kmeans.currentDeltaDistanceDifference > 100 ? 100 : kmeans.currentDeltaDistanceDifference)) / 100;
+            const maxDelta = CLUSTERING_DEFAULTS.MAX_DELTA_DISTANCE_FOR_PROGRESS;
+            const progress = (maxDelta - (kmeans.currentDeltaDistanceDifference > maxDelta ? maxDelta : kmeans.currentDeltaDistanceDifference)) / maxDelta;
             $("#statusKMeans").css("width", Math.round(progress * 100) + "%");
             ctxKmeans.putImageData(kmeansImgData, 0, 0);
             console.log(kmeans.currentDeltaDistanceDifference);
@@ -293,7 +295,7 @@ export class GUIProcessManager {
     /**
      *  Creates a vector based SVG image of the facets with the given configuration
      */
-    public static async createSVG(facetResult: FacetResult, colorsByIndex: RGB[], sizeMultiplier: number, fill: boolean, stroke: boolean, addColorLabels: boolean, fontSize: number = 50, fontColor: string = "black", onUpdate: ((progress: number) => void) | null = null) {
+    public static async createSVG(facetResult: FacetResult, colorsByIndex: RGB[], sizeMultiplier: number, fill: boolean, stroke: boolean, addColorLabels: boolean, fontSize: number = SVG_CONSTANTS.DEFAULT_FONT_SIZE, fontColor: string = SVG_CONSTANTS.DEFAULT_FONT_COLOR, onUpdate: ((progress: number) => void) | null = null) {
         const xmlns = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(xmlns, "svg");
         svg.setAttribute("width", sizeMultiplier * facetResult.width + "");
@@ -409,7 +411,7 @@ export class GUIProcessManager {
                     svg.appendChild(g);
                 }
 
-                if (count % 100 === 0) {
+                if (count % UPDATE_INTERVALS.BATCH_UPDATE_FREQUENCY === 0) {
                     await delay(0);
                     if (onUpdate != null) {
                         onUpdate(f.id / facetResult.facets.length);
