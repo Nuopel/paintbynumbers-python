@@ -1,222 +1,440 @@
 # Paint by Numbers Generator (Python)
 
-Python CLI implementation of the Paint by Numbers Generator - convert any image into a paint-by-numbers style image with numbered regions.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Test Coverage](https://img.shields.io/badge/coverage-92%25-brightgreen.svg)](https://github.com/Nuopel/paintbynumbersgenerator)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This is a Python port of the [TypeScript Paint by Numbers Generator](https://github.com/Nuopel/paintbynumbersgenerator) with perceptually identical output.
+Python CLI implementation of the Paint by Numbers Generator - convert any image into a paint-by-numbers style artwork with numbered regions.
 
-## Features
+This is a Python port of the [TypeScript Paint by Numbers Generator](https://github.com/Nuopel/paintbynumbersgenerator) with functionally identical output.
 
-- 🎨 Convert any image to paint-by-numbers format
-- 🔢 Smart K-means color clustering (RGB/HSL/LAB color spaces)
-- 📐 Vector SVG output with smooth borders
-- 🖼️ Raster PNG/JPG export
-- ⚙️ Highly configurable via settings JSON
-- 🎯 Optimal label placement using pole-of-inaccessibility algorithm
-- 🔄 Reproducible results with random seed
-- 📊 Color palette JSON export
+![Example Output](https://via.placeholder.com/800x300.png?text=Paint+by+Numbers+Example)
 
-## Installation
+## ✨ Features
 
-### From source
+- 🎨 **Smart Color Reduction**: K-means clustering in RGB/HSL/LAB color spaces
+- 🖼️ **Multiple Output Formats**: SVG (vector), PNG, JPG (raster)
+- 📐 **Smooth Borders**: Haar wavelet smoothing for clean edges
+- 🎯 **Optimal Label Placement**: Pole-of-inaccessibility algorithm
+- ⚙️ **Highly Configurable**: JSON settings for all parameters
+- 🔄 **Reproducible**: Random seed support
+- 🚀 **Fast**: Optimized NumPy operations
+- ✅ **Well Tested**: 92% test coverage, 420+ tests
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
+# From source
 cd python-paintbynumbers
 pip install -e .
 ```
 
-### With development dependencies
+### Basic Usage (CLI)
 
 ```bash
-pip install -e ".[dev]"
-```
+# Simple conversion
+paintbynumbers input.jpg output
 
-## Quick Start
+# With 24 colors
+paintbynumbers input.jpg output --colors 24
 
-### Basic usage
-
-```bash
-# Convert image to paint-by-numbers SVG
-paint-by-numbers -i input.jpg -o output.svg
-
-# With custom number of colors
-paint-by-numbers -i input.jpg -o output.svg --colors 24
-
-# Generate all formats (SVG, PNG, JPG, palette JSON)
-paint-by-numbers -i input.jpg -o output --format all
+# Generate PNG and JPG too
+paintbynumbers input.jpg output --png --jpg
 
 # Show progress
-paint-by-numbers -i input.jpg -o output.svg --verbose
+paintbynumbers input.jpg output --colors 16
 ```
 
-### Using settings file
-
-```bash
-# Load settings from JSON
-paint-by-numbers -i input.jpg -o output.svg -s settings.json
-
-# Use random seed for reproducibility
-paint-by-numbers -i input.jpg -o output.svg --seed 42
-```
-
-## Settings Configuration
-
-Create a `settings.json` file to customize processing:
-
-```json
-{
-  "kMeansNrOfClusters": 16,
-  "kMeansClusteringColorSpace": "LAB",
-  "removeFacetsSmallerThanNrOfPoints": 20,
-  "nrOfTimesToHalveBorderSegments": 2,
-  "randomSeed": 42
-}
-```
-
-See [`example_settings.json`](../example_settings.json) for all available options.
-
-## CLI Options
-
-```
-Options:
-  -i, --input PATH        Input image file (required)
-  -o, --output PATH       Output file path (required)
-  -s, --settings PATH     Settings JSON file
-  --colors INTEGER        Number of colors (default: 16)
-  --format [svg|png|jpg|all]  Output format (default: svg)
-  --seed INTEGER          Random seed for reproducibility
-  --verbose              Show progress information
-  --help                 Show this message and exit
-```
-
-## Python API
-
-You can also use the package programmatically:
+### Basic Usage (Python API)
 
 ```python
-from paintbynumbers import Settings, process_image_from_file
-from paintbynumbers.core.settings import ClusteringColorSpace
+from paintbynumbers.core.pipeline import PaintByNumbersPipeline
+from paintbynumbers.core.settings import Settings
 
-# Create settings
-settings = Settings(
-    kMeansNrOfClusters=20,
-    kMeansClusteringColorSpace=ClusteringColorSpace.LAB,
-    randomSeed=42
-)
+# Create default settings
+settings = Settings()
 
 # Process image
-result = process_image_from_file("input.jpg", settings, verbose=True)
-
-# Save outputs
-result.save_svg("output.svg")
-result.save_png("output.png")
-result.save_palette_json("palette.json")
+PaintByNumbersPipeline.process_and_save(
+    input_path='input.jpg',
+    output_path='output',
+    settings=settings,
+    export_png=True
+)
 ```
 
-## Development
+## 📖 Documentation
 
-### Running tests
+### CLI Commands
+
+**Main Command**: `paintbynumbers`
 
 ```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=paintbynumbers
-
-# Run specific test categories
-pytest -m "not slow"  # Skip slow tests
-pytest -m integration  # Only integration tests
+paintbynumbers INPUT OUTPUT [OPTIONS]
 ```
 
-### Type checking
+**Options:**
+
+```
+Required Arguments:
+  INPUT                   Path to input image file
+  OUTPUT                  Base path for output files (without extension)
+
+Color Settings:
+  --colors, -n INTEGER    Number of colors (default: 16)
+  --color-space [RGB|HSL|LAB]  Color space for clustering
+  --seed INTEGER          Random seed for reproducibility
+
+Image Processing:
+  --max-width INTEGER     Maximum image width
+  --max-height INTEGER    Maximum image height
+  --min-facet-size INTEGER  Minimum facet size in pixels
+  --max-facets INTEGER    Maximum number of facets
+  --border-smoothing INTEGER  Border smoothing iterations (0-3)
+
+Output Options:
+  --svg / --no-svg        Generate SVG (default: enabled)
+  --png                   Also generate PNG
+  --jpg                   Also generate JPG
+  --show-labels / --no-show-labels  Show numbered labels
+  --show-borders / --no-show-borders  Show borders
+  --fill-facets / --no-fill-facets  Fill facets with colors
+  --scale FLOAT           Output scale multiplier (default: 3.0)
+  --font-size INTEGER     Label font size (default: 20)
+  --font-color TEXT       Label color (default: #000000)
+
+Configuration:
+  --config, -c PATH       Load settings from JSON file
+  --save-config PATH      Save configuration to JSON file
+  --quiet, -q             Suppress progress output
+
+Other:
+  --help                  Show help message
+```
+
+**Configuration Command**: `paintbynumbers-config`
 
 ```bash
-mypy src/paintbynumbers
+# Create a default configuration file
+paintbynumbers-config --output my-settings.json
 ```
 
-### Linting
+### Examples
 
+#### Simple Conversion
 ```bash
-ruff check src/paintbynumbers
+paintbynumbers photo.jpg output
+# Creates: output.svg
 ```
 
-### Running benchmarks
-
+#### Custom Colors and Format
 ```bash
-pytest tests/benchmarks/ --benchmark-only
+paintbynumbers photo.jpg output --colors 32 --png --jpg
+# Creates: output.svg, output.png, output.jpg
 ```
 
-## Algorithm Overview
+#### Using Configuration File
+```bash
+# Create config
+paintbynumbers-config --output settings.json
 
-The processing pipeline consists of 7 main stages:
+# Use config
+paintbynumbers photo.jpg output --config settings.json
+```
 
-1. **Color Quantization**: K-means clustering to reduce colors
-2. **Strip Cleanup**: Remove narrow pixel strips
-3. **Facet Creation**: Flood-fill to find color regions
-4. **Facet Reduction**: Remove small regions, merge with neighbors
-5. **Border Tracing**: Wall-following algorithm to trace boundaries
-6. **Border Segmentation**: Haar wavelet smoothing
-7. **Label Placement**: Find optimal label positions
+#### Reproducible Results
+```bash
+paintbynumbers photo.jpg output --seed 42
+# Same seed = identical output
+```
 
-## Project Structure
+#### High Quality Output
+```bash
+paintbynumbers photo.jpg output \
+  --colors 32 \
+  --color-space LAB \
+  --min-facet-size 10 \
+  --border-smoothing 3 \
+  --scale 4.0 \
+  --png
+```
+
+#### Outline Only (Coloring Book Style)
+```bash
+paintbynumbers photo.jpg output \
+  --no-fill-facets \
+  --show-labels \
+  --show-borders
+```
+
+### Python API
+
+#### Basic Processing
+
+```python
+from paintbynumbers.core.pipeline import PaintByNumbersPipeline
+from paintbynumbers.core.settings import Settings
+
+# Default settings
+settings = Settings()
+
+# Process and save
+PaintByNumbersPipeline.process_and_save(
+    input_path='input.jpg',
+    output_path='output',
+    settings=settings,
+    export_png=True,
+    export_jpg=True
+)
+```
+
+#### Custom Settings
+
+```python
+from paintbynumbers.core.settings import Settings, ClusteringColorSpace
+
+settings = Settings()
+settings.kMeansNrOfClusters = 24
+settings.kMeansClusteringColorSpace = ClusteringColorSpace.LAB
+settings.removeFacetsSmallerThanNrOfPoints = 15
+settings.nrOfTimesToHalveBorderSegments = 3
+settings.randomSeed = 42
+
+PaintByNumbersPipeline.process_and_save(
+    input_path='input.jpg',
+    output_path='output',
+    settings=settings
+)
+```
+
+#### Programmatic Result Access
+
+```python
+# Get results without saving
+result = PaintByNumbersPipeline.process(
+    input_path='input.jpg',
+    settings=settings
+)
+
+# Access results
+print(f"Image: {result.width}x{result.height}")
+print(f"Colors: {len(result.colors_by_index)}")
+print(f"Facets: {len([f for f in result.facet_result.facets if f])}")
+
+# Save manually
+with open('output.svg', 'w') as f:
+    f.write(result.svg_content)
+```
+
+#### Progress Callbacks
+
+```python
+def progress_callback(stage: str, progress: float):
+    print(f"{stage}: {int(progress*100)}%")
+
+result = PaintByNumbersPipeline.process(
+    input_path='input.jpg',
+    settings=settings,
+    progress_callback=progress_callback
+)
+```
+
+#### Configuration Files
+
+```python
+import json
+from paintbynumbers.core.settings import Settings
+
+# Save configuration
+settings = Settings()
+settings.kMeansNrOfClusters = 20
+
+with open('config.json', 'w') as f:
+    json.dump(settings.to_json(), f, indent=2)
+
+# Load configuration
+with open('config.json', 'r') as f:
+    config_data = json.load(f)
+
+settings = Settings.from_json(config_data)
+```
+
+### Settings Reference
+
+See `examples/settings_example.json` for a fully documented settings file with all available options.
+
+**Key Settings:**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `kMeansNrOfClusters` | int | 16 | Number of colors (4-64 recommended) |
+| `kMeansClusteringColorSpace` | str | "RGB" | Color space: RGB, HSL, or LAB |
+| `removeFacetsSmallerThanNrOfPoints` | int | 20 | Min facet size in pixels |
+| `maximumNumberOfFacets` | int\|null | null | Hard limit on facet count |
+| `narrowPixelStripCleanupRuns` | int | 3 | Strip cleanup passes (0-5) |
+| `nrOfTimesToHalveBorderSegments` | int | 2 | Smoothing iterations (0-3) |
+| `resizeImageWidth` | int | 1024 | Max width when resizing |
+| `resizeImageHeight` | int | 1024 | Max height when resizing |
+| `randomSeed` | int\|null | null | Random seed for reproducibility |
+
+### Examples Directory
+
+The `examples/` directory contains:
+
+- `simple_cli_usage.py` - Minimal 10-line example
+- `basic_usage.py` - 7 comprehensive usage examples
+- `custom_settings.py` - Using JSON configuration files
+- `batch_process.py` - Processing multiple images
+- `settings_example.json` - Fully documented settings file
+
+## 🏗️ Architecture
+
+### Processing Pipeline
+
+The pipeline consists of 11 stages:
+
+1. **Image Loading** - Load and optionally resize image
+2. **K-means Clustering** - Reduce colors using k-means
+3. **Color Map Creation** - Assign pixels to color indices
+4. **Strip Cleanup** - Remove narrow pixel strips
+5. **Facet Building** - Find connected color regions (flood fill)
+6. **Neighbor Building** - Build facet adjacency relationships
+7. **Facet Reduction** - Merge small/similar facets
+8. **Border Tracing** - Trace facet boundaries (wall-following)
+9. **Border Segmentation** - Smooth borders (Haar wavelets)
+10. **Label Placement** - Find optimal label positions (polylabel)
+11. **SVG Generation** - Generate final SVG with Bezier curves
+
+### Project Structure
 
 ```
 python-paintbynumbers/
 ├── src/paintbynumbers/
-│   ├── cli/              # CLI application
-│   ├── core/             # Core processing pipeline
-│   ├── algorithms/       # K-means, flood fill, etc.
-│   ├── structs/          # Data structures
-│   ├── utils/            # Color conversion, I/O
-│   └── output/           # SVG/PNG/JPG generation
+│   ├── algorithms/          # Core algorithms
+│   │   ├── kmeans.py       # K-means clustering
+│   │   ├── flood_fill.py   # Flood fill algorithm
+│   │   ├── polylabel.py    # Label placement
+│   │   └── vector.py       # Vector math
+│   ├── cli/                # CLI application
+│   │   └── main.py         # Click-based CLI
+│   ├── core/               # Core processing
+│   │   ├── pipeline.py     # Main pipeline
+│   │   ├── settings.py     # Configuration
+│   │   └── types.py        # Type definitions
+│   ├── processing/         # Processing modules
+│   │   ├── colorreduction.py
+│   │   ├── facetbuilder.py
+│   │   ├── facetreduction.py
+│   │   ├── facetbordertracer.py
+│   │   ├── facetbordersegmenter.py
+│   │   └── facetlabelplacer.py
+│   ├── output/             # Output generation
+│   │   ├── svgbuilder.py   # SVG generation
+│   │   └── rasterexport.py # PNG/JPG export
+│   ├── structs/            # Data structures
+│   └── utils/              # Utilities
 ├── tests/
-│   ├── unit/             # Unit tests
-│   ├── integration/      # Integration tests
-│   ├── comparison/       # Comparison with TypeScript
-│   └── benchmarks/       # Performance benchmarks
-└── examples/             # Usage examples
+│   ├── unit/               # 370+ unit tests
+│   ├── integration/        # End-to-end tests
+│   ├── benchmarks/         # Performance tests
+│   └── ...
+└── examples/               # Usage examples
 ```
 
-## Requirements
+## 🧪 Development
 
-- Python 3.11 or higher
-- NumPy >= 1.24.0
-- Pillow >= 10.0.0
-- scikit-learn >= 1.3.0
-- svgwrite >= 1.4.0
-- click >= 8.1.0
-- cairosvg >= 2.7.0
-- tqdm >= 4.65.0
+### Running Tests
 
-## Differences from TypeScript Version
+```bash
+# All tests
+pytest
 
-- CLI-only (no web GUI)
-- Perceptually identical output (small numerical differences due to floating-point precision)
-- Python 3.11+ type hints instead of TypeScript types
-- Uses NumPy arrays instead of TypedArrays
+# With coverage
+pytest --cov=paintbynumbers --cov-report=html
 
-## License
+# Specific test categories
+pytest tests/unit/              # Unit tests only
+pytest tests/integration/       # Integration tests only
+pytest tests/benchmarks/        # Performance benchmarks
 
-MIT License - see LICENSE file
+# Ignore slow tests
+pytest --ignore=tests/benchmarks
+```
 
-## Original Project
+### Code Quality
 
-This is a Python port of the TypeScript project:
-https://github.com/Nuopel/paintbynumbersgenerator
+```bash
+# Type checking
+mypy src/paintbynumbers
 
-## Contributing
+# Linting
+ruff check src/paintbynumbers
 
-Contributions are welcome! Please:
+# Format code
+ruff format src/paintbynumbers
+```
+
+### Benchmarks
+
+```bash
+# Run performance benchmarks
+pytest tests/benchmarks/ --benchmark-only
+
+# Compare with previous results
+pytest tests/benchmarks/ --benchmark-compare
+```
+
+## 📋 Requirements
+
+- **Python**: 3.11 or higher
+- **Core Dependencies**:
+  - `numpy>=1.24.0` - Array operations
+  - `Pillow>=10.0.0` - Image I/O
+  - `scikit-learn>=1.3.0` - K-means clustering
+  - `svgwrite>=1.4.0` - SVG generation
+  - `click>=8.1.0` - CLI framework
+- **Optional**:
+  - `cairosvg>=2.7.0` - PNG/JPG export (preferred)
+  - Falls back to Pillow if unavailable
+
+## 🔄 Migration from TypeScript
+
+See [MIGRATION_NOTES.md](MIGRATION_NOTES.md) for:
+- API differences
+- Known limitations
+- Performance comparison
+- Python-specific considerations
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
 
 1. Fork the repository
 2. Create a feature branch
 3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
+4. Ensure all tests pass (`pytest`)
+5. Maintain 90%+ coverage
+6. Submit a pull request
 
-## Acknowledgments
+## 📜 License
 
-- Original TypeScript implementation
+MIT License - see [LICENSE](LICENSE) file for details
+
+## 🙏 Acknowledgments
+
+- Original [TypeScript implementation](https://github.com/Nuopel/paintbynumbersgenerator)
 - K-means clustering algorithm
-- Polylabel algorithm for pole of inaccessibility
+- [Polylabel](https://github.com/mapbox/polylabel) algorithm by Mapbox
 - Haar wavelet smoothing technique
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/Nuopel/paintbynumbersgenerator/issues)
+- **Documentation**: This README + docstrings in code
+- **Examples**: See `examples/` directory
+
+---
+
+**Made with ❤️ using Python** | [TypeScript Version](https://github.com/Nuopel/paintbynumbersgenerator)
