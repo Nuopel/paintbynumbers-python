@@ -6,6 +6,8 @@
   "scripts": {
     "lite": "lite-server --port 10001",
     "start": "npm run lite",
+    "build": "tsc -p src/tsconfig.json && tsc -p src-cli/tsconfig.json",
+    "build:cli": "tsc -p src-cli/tsconfig.json",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
