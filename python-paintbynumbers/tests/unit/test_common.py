@@ -5,10 +5,18 @@ import asyncio
 import time
 from paintbynumbers.core.common import delay, CancellationToken
 
+# Check if pytest-asyncio is available
+try:
+    import pytest_asyncio
+    HAS_PYTEST_ASYNCIO = True
+except ImportError:
+    HAS_PYTEST_ASYNCIO = False
+
 
 class TestDelay:
     """Test delay function."""
 
+    @pytest.mark.skipif(not HAS_PYTEST_ASYNCIO, reason="requires pytest-asyncio")
     @pytest.mark.asyncio
     async def test_delay_basic(self) -> None:
         """Test basic delay functionality."""
@@ -19,6 +27,7 @@ class TestDelay:
         # Should be approximately 100ms (allow 50ms tolerance)
         assert 50 < elapsed < 200
 
+    @pytest.mark.skipif(not HAS_PYTEST_ASYNCIO, reason="requires pytest-asyncio")
     @pytest.mark.asyncio
     async def test_delay_zero(self) -> None:
         """Test delay with zero milliseconds."""

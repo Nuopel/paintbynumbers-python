@@ -97,6 +97,41 @@ class PathPoint(Point):
             y += 0.5
         return y
 
+    def get_neighbour(self, facet_result) -> int:
+        """Get the facet ID of the neighbor adjacent to this wall.
+
+        Based on the orientation, checks the pixel on the other side of
+        the wall. Returns -1 if outside image bounds.
+
+        Args:
+            facet_result: FacetResult containing the facetMap
+
+        Returns:
+            Facet ID of neighbor, or -1 if outside bounds
+
+        Example:
+            >>> from paintbynumbers.processing.facetmanagement import FacetResult
+            >>> facet_result = FacetResult()
+            >>> facet_result.width = 10
+            >>> facet_result.height = 10
+            >>> # ... setup facetMap ...
+            >>> pt = PathPoint(5, 5, OrientationEnum.Left)
+            >>> neighbor_id = pt.get_neighbour(facet_result)
+        """
+        if self.orientation == OrientationEnum.Left:
+            if self.x - 1 >= 0:
+                return int(facet_result.facetMap.get(self.x - 1, self.y))
+        elif self.orientation == OrientationEnum.Right:
+            if self.x + 1 < facet_result.width:
+                return int(facet_result.facetMap.get(self.x + 1, self.y))
+        elif self.orientation == OrientationEnum.Top:
+            if self.y - 1 >= 0:
+                return int(facet_result.facetMap.get(self.x, self.y - 1))
+        elif self.orientation == OrientationEnum.Bottom:
+            if self.y + 1 < facet_result.height:
+                return int(facet_result.facetMap.get(self.x, self.y + 1))
+        return -1
+
     def __repr__(self) -> str:
         """String representation."""
         return f"PathPoint(x={self.x}, y={self.y}, orientation={self.orientation.name})"
