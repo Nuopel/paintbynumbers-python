@@ -3,4 +3,8 @@
 // Paint by Numbers Generator CLI
 // This is the entry point for the CLI application
 
-require('./src-cli/main.js');
+const path = require('path');
+const scriptDir = __dirname;
+const mainPath = path.join(scriptDir, 'src-cli', 'main.js');
+
+require(mainPath);
