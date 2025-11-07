@@ -154,11 +154,11 @@ class ColorReducer:
             if settings.kMeansClusteringColorSpace == ClusteringColorSpace.RGB:
                 data = [float(rgb[0]), float(rgb[1]), float(rgb[2])]
             elif settings.kMeansClusteringColorSpace == ClusteringColorSpace.HSL:
-                hsl = rgb_to_hsl(rgb[0], rgb[1], rgb[2])
-                data = [hsl.h, hsl.s, hsl.l]
+                hsl_result = rgb_to_hsl(rgb[0], rgb[1], rgb[2])
+                data = [hsl_result[0], hsl_result[1], hsl_result[2]]  # h, s, l
             elif settings.kMeansClusteringColorSpace == ClusteringColorSpace.LAB:
-                lab = rgb_to_lab(rgb[0], rgb[1], rgb[2])
-                data = [lab.l, lab.a, lab.b]
+                lab_result = rgb_to_lab(rgb[0], rgb[1], rgb[2])
+                data = [lab_result[0], lab_result[1], lab_result[2]]  # l, a, b
             else:
                 data = [float(rgb[0]), float(rgb[1]), float(rgb[2])]
 
@@ -225,11 +225,11 @@ class ColorReducer:
                 elif settings.kMeansClusteringColorSpace == ClusteringColorSpace.HSL:
                     hsl_values = centroid.values
                     rgb_tuple = hsl_to_rgb(hsl_values[0], hsl_values[1], hsl_values[2])
-                    rgb = [rgb_tuple.r, rgb_tuple.g, rgb_tuple.b]
+                    rgb = [rgb_tuple[0], rgb_tuple[1], rgb_tuple[2]]  # r, g, b
                 elif settings.kMeansClusteringColorSpace == ClusteringColorSpace.LAB:
                     lab_values = centroid.values
                     rgb_tuple = lab_to_rgb(lab_values[0], lab_values[1], lab_values[2])
-                    rgb = [rgb_tuple.r, rgb_tuple.g, rgb_tuple.b]
+                    rgb = [rgb_tuple[0], rgb_tuple[1], rgb_tuple[2]]  # r, g, b
                 else:
                     rgb = centroid.values
 
