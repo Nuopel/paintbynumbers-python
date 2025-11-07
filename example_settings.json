@@ -1,0 +1,35 @@
+{
+  "_comment": "Paint by Numbers Generator - Example Settings",
+  "_description": "All available configuration options for the Python CLI",
+
+  "kMeansNrOfClusters": 16,
+  "kMeansMinDeltaDifference": 1.0,
+  "kMeansClusteringColorSpace": "RGB",
+  "kMeansColorRestrictions": null,
+  "colorAliases": {},
+  "randomSeed": 42,
+
+  "removeFacetsSmallerThanNrOfPoints": 20,
+  "removeFacetsFromLargeToSmall": true,
+  "maximumNumberOfFacets": null,
+  "narrowPixelStripCleanupRuns": 3,
+
+  "nrOfTimesToHalveBorderSegments": 2,
+
+  "resizeImageIfTooLarge": true,
+  "resizeImageWidth": 1024,
+  "resizeImageHeight": 1024,
+
+  "outputProfiles": [
+    {
+      "name": "default",
+      "filetype": "svg",
+      "svgShowLabels": true,
+      "svgShowBorders": true,
+      "svgFillFacets": true,
+      "svgSizeMultiplier": 3,
+      "svgFontSize": 20,
+      "svgFontColor": "#000000"
+    }
+  ]
+}
