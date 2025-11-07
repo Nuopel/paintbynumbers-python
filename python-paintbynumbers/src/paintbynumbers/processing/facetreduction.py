@@ -5,7 +5,7 @@ reduce the total number of facets and create cleaner paint-by-numbers output.
 """
 
 from __future__ import annotations
-from typing import List, Set, Dict
+from typing import List, Set, Dict, Optional
 from paintbynumbers.core.types import RGB
 from paintbynumbers.structs.point import Point
 from paintbynumbers.structs.typed_arrays import BooleanArray2D, Uint8Array2D
@@ -25,7 +25,7 @@ class FacetReducer:
     def reduce_facets(
         smaller_than: int,
         remove_facets_from_large_to_small: bool,
-        maximum_number_of_facets: int,
+        maximum_number_of_facets: Optional[int],
         colors_by_index: List[RGB],
         facet_result: FacetResult,
         img_color_indices: Uint8Array2D
@@ -85,7 +85,7 @@ class FacetReducer:
 
         # Second pass: enforce maximum facet count
         facet_count = sum(1 for f in facet_result.facets if f is not None)
-        while facet_count > maximum_number_of_facets:
+        while maximum_number_of_facets is not None and facet_count > maximum_number_of_facets:
             # Re-evaluate order to remove smallest
             facet_processing_order = [
                 f.id for f in facet_result.facets if f is not None

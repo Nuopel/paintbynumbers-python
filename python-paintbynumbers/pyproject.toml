@@ -48,7 +48,8 @@ dev = [
 ]
 
 [project.scripts]
-paint-by-numbers = "paintbynumbers.cli.main:cli"
+paintbynumbers = "paintbynumbers.cli.main:main"
+paintbynumbers-config = "paintbynumbers.cli.main:init_config"
 
 [project.urls]
 Homepage = "https://github.com/Nuopel/paintbynumbersgenerator"

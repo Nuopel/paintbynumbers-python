@@ -66,7 +66,8 @@ class FacetLabelPlacer:
             # Add all neighbors that fall completely inside as inner rings
             # These are exclusion zones where labels cannot be placed
             if f.neighbourFacetsIsDirty:
-                FacetBuilder.build_facet_neighbour(f, facet_result)
+                builder = FacetBuilder()
+                builder.build_facet_neighbour(f, facet_result)
 
             if f.neighbourFacets is not None:
                 for neighbour_idx in f.neighbourFacets:
@@ -92,10 +93,12 @@ class FacetLabelPlacer:
             # Inner square has side length = 2 * sqrt(2) * radius
             f.labelBounds = BoundingBox()
             inner_padding = 2 * math.sqrt(2 * result.distance)
-            f.labelBounds.minX = int(result.pt.x - inner_padding)
-            f.labelBounds.maxX = int(result.pt.x + inner_padding)
-            f.labelBounds.minY = int(result.pt.y - inner_padding)
-            f.labelBounds.maxY = int(result.pt.y + inner_padding)
+            # result.pt is a tuple (x, y)
+            pt_x, pt_y = result.pt
+            f.labelBounds.minX = int(pt_x - inner_padding)
+            f.labelBounds.maxX = int(pt_x + inner_padding)
+            f.labelBounds.minY = int(pt_y - inner_padding)
+            f.labelBounds.maxY = int(pt_y + inner_padding)
 
             count += 1
             if count % 100 == 0 and on_update is not None:
