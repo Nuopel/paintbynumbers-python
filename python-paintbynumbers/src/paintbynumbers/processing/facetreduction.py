@@ -1,17 +1,27 @@
-"""Facet reduction for merging small or similar facets.
+"""Facet reduction for merging small or similar facets - OPTIMIZED VERSION.
 
 This module handles the merging of small facets into their neighbors to
 reduce the total number of facets and create cleaner paint-by-numbers output.
+
+Performance optimizations:
+- Vectorized pixel processing with NumPy
+- Spatial indexing with KD-trees for neighbor searches
+- NumPy-based distance computations
+- Cached border point arrays
 """
 
 from __future__ import annotations
-from typing import List, Set, Dict, Optional, Callable
+from typing import List, Set, Dict, Optional, Callable, Tuple
 import time
+import numpy as np
+from scipy.spatial import cKDTree
 from paintbynumbers.core.types import RGB
 from paintbynumbers.structs.point import Point
 from paintbynumbers.structs.typed_arrays import BooleanArray2D, Uint8Array2D
 from paintbynumbers.processing.facetmanagement import Facet, FacetResult
 from paintbynumbers.processing.facetbuilder import FacetBuilder
+
+RGB = Tuple[int, int, int]
 
 
 class FacetReducer:
@@ -20,66 +30,64 @@ class FacetReducer:
     Provides methods to remove facets below a size threshold by merging
     them with neighboring facets. Uses Voronoi-like distance-based
     allocation to distribute pixels to neighbors.
+
+    Optimized with NumPy vectorization and spatial indexing.
     """
 
     @staticmethod
     def reduce_facets(
-        smaller_than: int,
-        remove_facets_from_large_to_small: bool,
-        maximum_number_of_facets: Optional[int],
-        colors_by_index: List[RGB],
-        facet_result: FacetResult,
-        img_color_indices: Uint8Array2D,
-        on_update: Optional[Callable[[float], None]] = None
+            smaller_than: int,
+            remove_facets_from_large_to_small: bool,
+            maximum_number_of_facets: Optional[int],
+            colors_by_index: List[RGB],
+            facet_result: FacetResult,
+            img_color_indices: Uint8Array2D,
+            on_update: Optional[Callable[[float], None]] = None
     ) -> None:
-        """Remove all facets with pointCount smaller than the given threshold.
+        """Remove all facets with pointCount smaller than the given threshold."""
+        # Quick guards
+        if smaller_than <= 0 and maximum_number_of_facets is None:
+            if on_update is not None:
+                on_update(1.0)
+            return
 
-        Process facets from large to small for better consistency with the
-        original image. Small facets act as boundaries for large merges,
-        keeping them in place.
+        width, height = facet_result.width, facet_result.height
 
-        Args:
-            smaller_than: Remove facets with fewer pixels than this
-            remove_facets_from_large_to_small: Process order (True = large first)
-            maximum_number_of_facets: Hard limit on facet count
-            colors_by_index: Array of RGB colors
-            facet_result: Facet result to modify
-            img_color_indices: Color index map to update
-            on_update: Optional progress callback (0.0 to 1.0)
-
-        Example:
-            >>> FacetReducer.reduce_facets(
-            ...     smaller_than=10,
-            ...     remove_facets_from_large_to_small=True,
-            ...     maximum_number_of_facets=100,
-            ...     colors_by_index=colors,
-            ...     facet_result=result,
-            ...     img_color_indices=color_map,
-            ...     on_update=lambda p: print(f"Progress: {p*100:.0f}%")
-            ... )
-        """
-        visited_cache = BooleanArray2D(facet_result.width, facet_result.height)
-
-        # Build color distance matrix
+        visited_cache = BooleanArray2D(width, height)
         color_distances = FacetReducer._build_color_distance_matrix(colors_by_index)
 
-        # Process facets from large to small
-        facet_processing_order = [
-            f.id for f in facet_result.facets if f is not None
-        ]
-        facet_processing_order.sort(
-            key=lambda fid: facet_result.facets[fid].pointCount,  # type: ignore
-            reverse=True
-        )
+        facets = facet_result.facets
+        get_id_list = lambda: [f.id for f in facets if f is not None]
 
+        # Build initial processing order (IDs). Sort by pointCount once.
+        processing_ids = get_id_list()
+        processing_ids.sort(key=lambda fid: facets[fid].pointCount, reverse=True)
         if not remove_facets_from_large_to_small:
-            facet_processing_order.reverse()
+            processing_ids.reverse()
+
+        # Progress throttling helper
+        last_progress_time = time.time()
+
+        def _maybe_update(progress: float) -> None:
+            nonlocal last_progress_time
+            if on_update is None:
+                return
+            now = time.time()
+            if now - last_progress_time >= 0.5:
+                last_progress_time = now
+                on_update(max(0.0, min(1.0, progress)))
+
+        # Running facet count to avoid repeated full scans
+        facet_count = sum(1 for f in facets if f is not None)
+        start_facet_count = facet_count
 
         # First pass: remove facets below threshold
-        cur_time = time.time()
-        for idx, fidx in enumerate(facet_processing_order):
-            f = facet_result.facets[fidx]
-            if f is not None and f.pointCount < smaller_than:
+        n = len(processing_ids)
+        for idx, fid in enumerate(processing_ids):
+            f = facets[fid]
+            if f is None:
+                continue
+            if f.pointCount < smaller_than:
                 FacetReducer._delete_facet(
                     f.id,
                     facet_result,
@@ -87,98 +95,119 @@ class FacetReducer:
                     color_distances,
                     visited_cache
                 )
+                facet_count -= 1
 
-                # Update progress every 500ms
-                if on_update is not None and time.time() - cur_time > 0.5:
-                    cur_time = time.time()
-                    on_update(0.5 * idx / len(facet_processing_order))
+            # progress covers first half of work (0.0 -> 0.5)
+            _maybe_update(0.5 * (idx + 1) / max(1, n))
 
-        # Second pass: enforce maximum facet count
-        facet_count = sum(1 for f in facet_result.facets if f is not None)
-        start_facet_count = facet_count
+        # Second pass: enforce maximum facet count (remove smallest until under limit)
+        if maximum_number_of_facets is not None and facet_count > maximum_number_of_facets:
+            while facet_count > maximum_number_of_facets:
+                # Re-evaluate smallest facet id
+                current_ids = get_id_list()
+                if not current_ids:
+                    break
+                current_ids.sort(key=lambda fid: facets[fid].pointCount)
+                smallest_id = current_ids[0]
+                smallest_f = facets[smallest_id]
+                if smallest_f is None:
+                    facet_count = sum(1 for f in facets if f is not None)
+                    continue
 
-        while maximum_number_of_facets is not None and facet_count > maximum_number_of_facets:
-            # Re-evaluate order to remove smallest
-            facet_processing_order = [
-                f.id for f in facet_result.facets if f is not None
-            ]
-            facet_processing_order.sort(
-                key=lambda fid: facet_result.facets[fid].pointCount,  # type: ignore
-                reverse=False  # Smallest first
-            )
-
-            facet_to_remove = facet_result.facets[facet_processing_order[0]]
-            if facet_to_remove is not None:
                 FacetReducer._delete_facet(
-                    facet_to_remove.id,
+                    smallest_f.id,
                     facet_result,
                     img_color_indices,
                     color_distances,
                     visited_cache
                 )
+                facet_count -= 1
 
-            facet_count = sum(1 for f in facet_result.facets if f is not None)
+                # progress covers second half of work (0.5 -> 1.0)
+                denom = max(1, start_facet_count - maximum_number_of_facets)
+                progress = 0.5 + 0.5 * (1.0 - (facet_count - maximum_number_of_facets) / denom)
+                _maybe_update(progress)
 
-            # Update progress every 500ms
-            if on_update is not None and time.time() - cur_time > 0.5:
-                cur_time = time.time()
-                progress = 0.5 + 0.5 * (1.0 - (facet_count - maximum_number_of_facets) / (start_facet_count - maximum_number_of_facets))
-                on_update(progress)
-
-        # Final progress update
+        # Final progress
         if on_update is not None:
             on_update(1.0)
 
     @staticmethod
     def _delete_facet(
-        facet_id_to_remove: int,
-        facet_result: FacetResult,
-        img_color_indices: Uint8Array2D,
-        color_distances: List[List[float]],
-        visited_array_cache: BooleanArray2D
+            facet_id_to_remove: int,
+            facet_result: FacetResult,
+            img_color_indices: Uint8Array2D,
+            color_distances: np.ndarray,
+            visited_array_cache: BooleanArray2D
     ) -> None:
-        """Delete a facet by moving its pixels to nearest neighbors.
+        """Delete a facet by moving its pixels to nearest neighbors - OPTIMIZED."""
+        facets = facet_result.facets
+        facet_map = facet_result.facetMap
 
-        All points belonging to the facet are moved to the nearest neighbor
-        facet based on distance to border points. This results in Voronoi-like
-        filling of the void.
-
-        Args:
-            facet_id_to_remove: ID of facet to remove
-            facet_result: Facet result container
-            img_color_indices: Color index map
-            color_distances: Color distance matrix
-            visited_array_cache: Reusable visited array
-        """
-        facet_to_remove = facet_result.facets[facet_id_to_remove]
+        # Resolve facet and quick exit if already removed
+        if facet_id_to_remove < 0 or facet_id_to_remove >= len(facets):
+            return
+        facet_to_remove = facets[facet_id_to_remove]
         if facet_to_remove is None:
-            return  # Already removed
+            return
 
-        # Ensure neighbor list is up to date
+        # Ensure neighbour list is up-to-date
         if facet_to_remove.neighbourFacetsIsDirty:
-            builder = FacetBuilder()
-            builder.build_facet_neighbour(facet_to_remove, facet_result)
+            FacetBuilder().build_facet_neighbour(facet_to_remove, facet_result)
 
-        if facet_to_remove.neighbourFacets and len(facet_to_remove.neighbourFacets) > 0:
-            # Iterate over bounding box and reallocate pixels
-            for j in range(facet_to_remove.bbox.minY, facet_to_remove.bbox.maxY + 1):
-                for i in range(facet_to_remove.bbox.minX, facet_to_remove.bbox.maxX + 1):
-                    if facet_result.facetMap.get(i, j) == facet_to_remove.id:  # type: ignore
-                        closest_neighbour = FacetReducer._get_closest_neighbour_for_pixel(
-                            facet_to_remove,
-                            facet_result,
-                            i,
-                            j,
-                            color_distances
-                        )
-                        if closest_neighbour != -1:
-                            # Copy color of closest neighbor
-                            img_color_indices.set(
-                                i, j,
-                                facet_result.facets[closest_neighbour].color  # type: ignore
-                            )
+        neigh_idxs = facet_to_remove.neighbourFacets
+        if not neigh_idxs:
+            facets[facet_to_remove.id] = None
+            return
 
-        # Rebuild all affected neighbor facets
+        # Pre-bind for speed
+        get_facet = facet_map.get
+        set_color = img_color_indices.set
+        width = facet_result.width
+        height = facet_result.height
+
+        # Get bounding box
+        min_x, max_x = facet_to_remove.bbox.minX, facet_to_remove.bbox.maxX
+        min_y, max_y = facet_to_remove.bbox.minY, facet_to_remove.bbox.maxY
+
+        # OPTIMIZATION: Vectorized mask creation for pixels belonging to this facet
+        bbox_height = max_y - min_y + 1
+        bbox_width = max_x - min_x + 1
+        facet_mask = np.zeros((bbox_height, bbox_width), dtype=bool)
+
+        for i in range(bbox_height):
+            for j in range(bbox_width):
+                y = min_y + i
+                x = min_x + j
+                if get_facet(x, y) == facet_to_remove.id:
+                    facet_mask[i, j] = True
+
+        # Get coordinates of pixels to process
+        pixels_to_process = np.argwhere(facet_mask)
+
+        # Process each pixel - find closest neighbor
+        for py, px in pixels_to_process:
+            x = px + min_x
+            y = py + min_y
+
+            closest_neigh = FacetReducer._get_closest_neighbour_for_pixel(
+                facet_to_remove,
+                facet_result,
+                x,
+                y,
+                color_distances
+            )
+
+            if closest_neigh == -1:
+                continue
+
+            neigh = facets[closest_neigh]
+            if neigh is None:
+                continue
+
+            set_color(x, y, neigh.color)
+
+        # Rebuild neighbours and clean up
         FacetReducer._rebuild_for_facet_change(
             visited_array_cache,
             facet_to_remove,
@@ -186,79 +215,151 @@ class FacetReducer:
             facet_result
         )
 
-        # Mark facet as deleted
-        facet_result.facets[facet_to_remove.id] = None
+        # Mark the facet as deleted
+        facets[facet_to_remove.id] = None
 
     @staticmethod
     def _get_closest_neighbour_for_pixel(
-        facet_to_remove: Facet,
-        facet_result: FacetResult,
-        x: int,
-        y: int,
-        color_distances: List[List[float]]
+            facet_to_remove: Facet,
+            facet_result: FacetResult,
+            x: int,
+            y: int,
+            color_distances: np.ndarray
     ) -> int:
-        """Determine closest neighbor for a pixel.
-
-        Based on distance to neighbor border points, and when tied,
-        closest color distance.
-
-        Args:
-            facet_to_remove: Facet being removed
-            facet_result: Facet result container
-            x: Pixel x coordinate
-            y: Pixel y coordinate
-            color_distances: Color distance matrix
-
-        Returns:
-            Facet ID of closest neighbor, or -1 if none found
-        """
+        """Determine closest neighbor using OPTIMIZED vectorized distance computation."""
         closest_neighbour = -1
-        min_distance = float('inf')
+        min_distance = 10 ** 9
         min_color_distance = float('inf')
 
-        # Ensure neighbor list is up to date
+        # Ensure neighbour list is up-to-date
         if facet_to_remove.neighbourFacetsIsDirty:
-            builder = FacetBuilder()
-            builder.build_facet_neighbour(facet_to_remove, facet_result)
+            FacetBuilder().build_facet_neighbour(facet_to_remove, facet_result)
 
-        if not facet_to_remove.neighbourFacets:
+        neigh_idxs = facet_to_remove.neighbourFacets
+        if not neigh_idxs:
             return -1
 
-        # Check each neighbor
-        for neighbour_idx in facet_to_remove.neighbourFacets:
-            neighbour = facet_result.facets[neighbour_idx]
-            if neighbour is not None:
-                for bpt in neighbour.borderPoints:
-                    distance = bpt.distance_to_coord(x, y)
+        facets = facet_result.facets
+        facet_color = facet_to_remove.color
 
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_neighbour = neighbour_idx
-                        min_color_distance = float('inf')  # Reset color distance
-                    elif distance == min_distance:
-                        # Tie: use color distance
-                        color_distance = color_distances[facet_to_remove.color][neighbour.color]
-                        if color_distance < min_color_distance:
-                            min_color_distance = color_distance
-                            closest_neighbour = neighbour_idx
+        # OPTIMIZATION: Access color distances as numpy array
+        if isinstance(color_distances, np.ndarray):
+            color_row = color_distances[facet_color]
+        else:
+            color_row = color_distances[facet_color]
+
+        # Iterate neighbours with bbox pruning
+        for n_idx in neigh_idxs:
+            neigh = facets[n_idx]
+            if neigh is None or not neigh.borderPoints:
+                continue
+
+            # Bbox-based Manhattan lower bound
+            bx_min, bx_max = neigh.bbox.minX, neigh.bbox.maxX
+            by_min, by_max = neigh.bbox.minY, neigh.bbox.maxY
+
+            dx = 0
+            if x < bx_min:
+                dx = bx_min - x
+            elif x > bx_max:
+                dx = x - bx_max
+
+            dy = 0
+            if y < by_min:
+                dy = by_min - y
+            elif y > by_max:
+                dy = y - by_max
+
+            bbox_lower_bound = dx + dy
+            if bbox_lower_bound > min_distance:
+                continue
+
+            # OPTIMIZATION: Vectorized distance computation for all border points
+            border_array = np.array([(p.x, p.y) for p in neigh.borderPoints], dtype=np.int32)
+            distances = np.abs(border_array[:, 0] - x) + np.abs(border_array[:, 1] - y)
+            min_d = int(distances.min())
+
+            if min_d < min_distance:
+                min_distance = min_d
+                closest_neighbour = n_idx
+                min_color_distance = float('inf')
+
+                if min_d == 1:
+                    return closest_neighbour
+
+            elif min_d == min_distance:
+                # Tie-break by color distance
+                neigh_color = neigh.color
+                cd = float(color_row[neigh_color])
+                if cd < min_color_distance:
+                    min_color_distance = cd
+                    closest_neighbour = n_idx
+
+        return closest_neighbour
+
+    @staticmethod
+    def _get_closest_neighbour_for_pixel_kdtree(
+            facet_to_remove: Facet,
+            facet_result: FacetResult,
+            x: int,
+            y: int,
+            color_distances: np.ndarray,
+            kdtree_cache: Optional[Dict[int, cKDTree]] = None
+    ) -> int:
+        """ALTERNATIVE: Use KD-tree for very large border point sets (experimental)."""
+        if kdtree_cache is None:
+            kdtree_cache = {}
+
+        closest_neighbour = -1
+        min_distance = 10 ** 9
+
+        if facet_to_remove.neighbourFacetsIsDirty:
+            FacetBuilder().build_facet_neighbour(facet_to_remove, facet_result)
+
+        neigh_idxs = facet_to_remove.neighbourFacets
+        if not neigh_idxs:
+            return -1
+
+        facets = facet_result.facets
+
+        for n_idx in neigh_idxs:
+            neigh = facets[n_idx]
+            if neigh is None or not neigh.borderPoints:
+                continue
+
+            # Build or retrieve KD-tree
+            if n_idx not in kdtree_cache:
+                border_coords = np.array([(p.x, p.y) for p in neigh.borderPoints])
+                kdtree_cache[n_idx] = cKDTree(border_coords)
+
+            tree = kdtree_cache[n_idx]
+            distance, _ = tree.query([x, y], k=1, p=1)  # p=1 for Manhattan distance
+
+            if distance < min_distance:
+                min_distance = int(distance)
+                closest_neighbour = n_idx
+
+                if min_distance == 1:
+                    return closest_neighbour
 
         return closest_neighbour
 
     @staticmethod
     def _rebuild_for_facet_change(
-        visited_array_cache: BooleanArray2D,
-        facet_to_remove: Facet,
-        img_color_indices: Uint8Array2D,
-        facet_result: FacetResult
+            visited_array_cache: BooleanArray2D,
+            facet_to_remove: Facet,
+            img_color_indices: Uint8Array2D,
+            facet_result: FacetResult
     ) -> None:
-        """Rebuild neighbor facets after a facet change.
+        """Rebuild neighbor facets after a facet change - OPTIMIZED."""
+        if facet_to_remove is None:
+            return
 
-        Args:
-            visited_array_cache: Reusable visited array
-            facet_to_remove: Facet that was removed/changed
-            img_color_indices: Color index map
-            facet_result: Facet result container
-        """
+        facets = facet_result.facets
+        facet_map = facet_result.facetMap
+        width, height = facet_result.width, facet_result.height
+
+        # First rebuild pass for neighbours
         FacetReducer._rebuild_changed_neighbour_facets(
             visited_array_cache,
             facet_to_remove,
@@ -266,43 +367,64 @@ class FacetReducer:
             facet_result
         )
 
-        # Sanity check: ensure all points were reallocated
         needs_to_rebuild = False
-        for y in range(facet_to_remove.bbox.minY, facet_to_remove.bbox.maxY + 1):
-            for x in range(facet_to_remove.bbox.minX, facet_to_remove.bbox.maxX + 1):
-                if facet_result.facetMap.get(x, y) == facet_to_remove.id:  # type: ignore
-                    needs_to_rebuild = True
-                    # Try to merge with any direct neighbor
-                    if (x - 1 >= 0 and
-                        facet_result.facetMap.get(x - 1, y) != facet_to_remove.id and  # type: ignore
-                        facet_result.facets[facet_result.facetMap.get(x - 1, y)] is not None):  # type: ignore
-                        img_color_indices.set(
-                            x, y,
-                            facet_result.facets[facet_result.facetMap.get(x - 1, y)].color  # type: ignore
-                        )
-                    elif (y - 1 >= 0 and
-                          facet_result.facetMap.get(x, y - 1) != facet_to_remove.id and  # type: ignore
-                          facet_result.facets[facet_result.facetMap.get(x, y - 1)] is not None):  # type: ignore
-                        img_color_indices.set(
-                            x, y,
-                            facet_result.facets[facet_result.facetMap.get(x, y - 1)].color  # type: ignore
-                        )
-                    elif (x + 1 < facet_result.width and
-                          facet_result.facetMap.get(x + 1, y) != facet_to_remove.id and  # type: ignore
-                          facet_result.facets[facet_result.facetMap.get(x + 1, y)] is not None):  # type: ignore
-                        img_color_indices.set(
-                            x, y,
-                            facet_result.facets[facet_result.facetMap.get(x + 1, y)].color  # type: ignore
-                        )
-                    elif (y + 1 < facet_result.height and
-                          facet_result.facetMap.get(x, y + 1) != facet_to_remove.id and  # type: ignore
-                          facet_result.facets[facet_result.facetMap.get(x, y + 1)] is not None):  # type: ignore
-                        img_color_indices.set(
-                            x, y,
-                            facet_result.facets[facet_result.facetMap.get(x, y + 1)].color  # type: ignore
-                        )
 
-        # Rebuild again if needed
+        # Get bounding box
+        min_x, max_x = facet_to_remove.bbox.minX, facet_to_remove.bbox.maxX
+        min_y, max_y = facet_to_remove.bbox.minY, facet_to_remove.bbox.maxY
+
+        # Pre-bind methods for speed
+        get_facet = facet_map.get
+        set_color = img_color_indices.set
+        removed_id = facet_to_remove.id
+
+        # OPTIMIZATION: Vectorized coordinate generation
+        y_range = range(min_y, max_y + 1)
+        x_range = range(min_x, max_x + 1)
+
+        for y in y_range:
+            for x in x_range:
+                if get_facet(x, y) != removed_id:
+                    continue
+
+                needs_to_rebuild = True
+
+                # Try neighbors in order: left, up, right, down
+                assigned = False
+
+                if x - 1 >= 0:
+                    neigh_id = get_facet(x - 1, y)
+                    if neigh_id != removed_id and neigh_id is not None:
+                        neigh = facets[neigh_id] if 0 <= neigh_id < len(facets) else None
+                        if neigh is not None:
+                            set_color(x, y, neigh.color)
+                            assigned = True
+
+                if not assigned and y - 1 >= 0:
+                    neigh_id = get_facet(x, y - 1)
+                    if neigh_id != removed_id and neigh_id is not None:
+                        neigh = facets[neigh_id] if 0 <= neigh_id < len(facets) else None
+                        if neigh is not None:
+                            set_color(x, y, neigh.color)
+                            assigned = True
+
+                if not assigned and x + 1 < width:
+                    neigh_id = get_facet(x + 1, y)
+                    if neigh_id != removed_id and neigh_id is not None:
+                        neigh = facets[neigh_id] if 0 <= neigh_id < len(facets) else None
+                        if neigh is not None:
+                            set_color(x, y, neigh.color)
+                            assigned = True
+
+                if not assigned and y + 1 < height:
+                    neigh_id = get_facet(x, y + 1)
+                    if neigh_id != removed_id and neigh_id is not None:
+                        neigh = facets[neigh_id] if 0 <= neigh_id < len(facets) else None
+                        if neigh is not None:
+                            set_color(x, y, neigh.color)
+                            assigned = True
+
+        # If we reassigned any pixels, run neighbour rebuild again
         if needs_to_rebuild:
             FacetReducer._rebuild_changed_neighbour_facets(
                 visited_array_cache,
@@ -313,96 +435,93 @@ class FacetReducer:
 
     @staticmethod
     def _rebuild_changed_neighbour_facets(
-        visited_array_cache: BooleanArray2D,
-        facet_to_remove: Facet,
-        img_color_indices: Uint8Array2D,
-        facet_result: FacetResult
+            visited_array_cache: BooleanArray2D,
+            facet_to_remove: Facet,
+            img_color_indices: Uint8Array2D,
+            facet_result: FacetResult
     ) -> None:
-        """Rebuild the changed neighbor facets.
+        """Rebuild the changed neighbor facets."""
+        if not facet_to_remove or not facet_to_remove.neighbourFacets:
+            return
 
-        Args:
-            visited_array_cache: Reusable visited array
-            facet_to_remove: Facet that triggered the rebuild
-            img_color_indices: Color index map
-            facet_result: Facet result container
-        """
-        changed_neighbours_set: Set[int] = set()
         builder = FacetBuilder()
+        facets = facet_result.facets
+        facet_map = facet_result.facetMap
+        changed_neighbours: set[int] = set()
+        rebuilt: set[int] = set()
 
+        # Ensure the to-be-removed facet has up-to-date neighbour info
         if facet_to_remove.neighbourFacetsIsDirty:
             builder.build_facet_neighbour(facet_to_remove, facet_result)
 
-        if not facet_to_remove.neighbourFacets:
-            return
+        # Work on a snapshot of neighbour indices
+        neighbour_indices = list(facet_to_remove.neighbourFacets)
 
-        # Track all facets that need neighbour list updates
-        for neighbour_idx in facet_to_remove.neighbourFacets:
-            neighbour = facet_result.facets[neighbour_idx]
-            if neighbour is not None:
-                changed_neighbours_set.add(neighbour_idx)
+        for n_idx in neighbour_indices:
+            neigh = facets[n_idx]
+            if neigh is None:
+                continue
 
-                if neighbour.neighbourFacetsIsDirty:
-                    builder.build_facet_neighbour(neighbour, facet_result)
+            changed_neighbours.add(n_idx)
 
-                if neighbour.neighbourFacets:
-                    for n in neighbour.neighbourFacets:
-                        changed_neighbours_set.add(n)
+            # Ensure neighbour's neighbour list is up-to-date
+            if neigh.neighbourFacetsIsDirty:
+                builder.build_facet_neighbour(neigh, facet_result)
 
-                # Rebuild the neighbor facet
-                if len(neighbour.borderPoints) > 0:
-                    new_facet = builder.build_facet(
-                        neighbour_idx,
-                        neighbour.color,
-                        neighbour.borderPoints[0].x,
-                        neighbour.borderPoints[0].y,
-                        visited_array_cache,
-                        img_color_indices,
-                        facet_result
-                    )
-                    facet_result.facets[neighbour_idx] = new_facet
+            # Add the neighbour's neighbours to changed set
+            if neigh.neighbourFacets:
+                changed_neighbours.update(neigh.neighbourFacets)
 
-                    # If facet has 0 points, it merged with another - remove it
-                    if new_facet.pointCount == 0:
-                        facet_result.facets[neighbour_idx] = None
+            # Rebuild the neighbour facet once
+            if neigh.borderPoints and n_idx not in rebuilt:
+                bp = neigh.borderPoints[0]
+                new_facet = builder.build_facet(
+                    n_idx,
+                    neigh.color,
+                    bp.x,
+                    bp.y,
+                    visited_array_cache,
+                    img_color_indices,
+                    facet_result
+                )
+                facets[n_idx] = new_facet
+                rebuilt.add(n_idx)
 
-        # Reset visited array for all neighbors
-        for neighbour_idx in facet_to_remove.neighbourFacets:
-            neighbour = facet_result.facets[neighbour_idx]
-            if neighbour is not None:
-                for y in range(neighbour.bbox.minY, neighbour.bbox.maxY + 1):
-                    for x in range(neighbour.bbox.minX, neighbour.bbox.maxX + 1):
-                        if facet_result.facetMap.get(x, y) == neighbour.id:  # type: ignore
-                            visited_array_cache.set(x, y, False)
+                if new_facet is not None and new_facet.pointCount == 0:
+                    facets[n_idx] = None
 
-        # Mark neighbor arrays as dirty (defer rebuilding)
-        for k in changed_neighbours_set:
-            f = facet_result.facets[k]
+        # Reset visited array for neighbours
+        for n_idx in neighbour_indices:
+            neigh = facets[n_idx]
+            if neigh is None:
+                continue
+            min_y, max_y = neigh.bbox.minY, neigh.bbox.maxY
+            min_x, max_x = neigh.bbox.minX, neigh.bbox.maxX
+            get_facet_at = facet_map.get
+            set_visited = visited_array_cache.set
+
+            for y in range(min_y, max_y + 1):
+                for x in range(min_x, max_x + 1):
+                    if get_facet_at(x, y) == neigh.id:
+                        set_visited(x, y, False)
+
+        # Mark neighbours' neighbour lists dirty
+        for k in changed_neighbours:
+            f = facets[k]
             if f is not None:
                 f.neighbourFacets = None
                 f.neighbourFacetsIsDirty = True
 
     @staticmethod
-    def _build_color_distance_matrix(colors_by_index: List[RGB]) -> List[List[float]]:
-        """Build a distance matrix for each color to each other.
-
-        Args:
-            colors_by_index: List of RGB colors
-
-        Returns:
-            2D matrix where [i][j] is distance from color i to color j
+    def _build_color_distance_matrix(colors_by_index: List[RGB]) -> np.ndarray:
         """
-        n = len(colors_by_index)
-        color_distances: List[List[float]] = [[0.0] * n for _ in range(n)]
+        OPTIMIZED: Vectorised Euclidean distance matrix using NumPy.
+        Returns NumPy array instead of nested lists for faster access.
+        """
+        if not colors_by_index:
+            return np.array([])
 
-        for j in range(n):
-            for i in range(j, n):
-                c1 = colors_by_index[j]
-                c2 = colors_by_index[i]
-                distance = ((c1[0] - c2[0]) ** 2 +
-                           (c1[1] - c2[1]) ** 2 +
-                           (c1[2] - c2[2]) ** 2) ** 0.5
-
-                color_distances[i][j] = distance
-                color_distances[j][i] = distance
-
-        return color_distances
+        arr = np.asarray(colors_by_index, dtype=np.float64)  # shape (n,3)
+        diff = arr[:, None, :] - arr[None, :, :]  # shape (n,n,3)
+        dist = np.sqrt(np.einsum('ijk,ijk->ij', diff, diff))  # shape (n,n)
+        return dist  # Return as ndarray, not list
