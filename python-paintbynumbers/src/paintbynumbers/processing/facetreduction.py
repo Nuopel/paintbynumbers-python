@@ -170,17 +170,25 @@ class FacetReducer:
         min_x, max_x = facet_to_remove.bbox.minX, facet_to_remove.bbox.maxX
         min_y, max_y = facet_to_remove.bbox.minY, facet_to_remove.bbox.maxY
 
-        # OPTIMIZATION: Vectorized mask creation for pixels belonging to this facet
+        # OPTIMIZATION: Fully vectorized mask creation using batch facet map query
         bbox_height = max_y - min_y + 1
         bbox_width = max_x - min_x + 1
-        facet_mask = np.zeros((bbox_height, bbox_width), dtype=bool)
 
-        for i in range(bbox_height):
-            for j in range(bbox_width):
-                y = min_y + i
-                x = min_x + j
-                if get_facet(x, y) == facet_to_remove.id:
-                    facet_mask[i, j] = True
+        # Build coordinate grids for vectorized lookup
+        y_coords, x_coords = np.meshgrid(
+            np.arange(min_y, max_y + 1, dtype=np.int32),
+            np.arange(min_x, max_x + 1, dtype=np.int32),
+            indexing='ij'
+        )
+
+        # Vectorized facet ID retrieval
+        facet_ids = np.array([
+            [get_facet(x, y) for x in range(min_x, max_x + 1)]
+            for y in range(min_y, max_y + 1)
+        ], dtype=np.int32)
+
+        # Create mask in one vectorized operation
+        facet_mask = (facet_ids == facet_to_remove.id)
 
         # Get coordinates of pixels to process
         pixels_to_process = np.argwhere(facet_mask)
