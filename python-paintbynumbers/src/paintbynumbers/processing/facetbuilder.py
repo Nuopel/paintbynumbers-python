@@ -2,13 +2,10 @@
 
 Separates facet construction from region finding, making the code
 more modular and easier to test.
-
-OPTIMIZED: Uses NumPy for batched neighbor detection.
 """
 
 from __future__ import annotations
 from typing import List, Set
-import numpy as np
 from paintbynumbers.structs.point import Point
 from paintbynumbers.structs.boundingbox import BoundingBox
 from paintbynumbers.structs.typed_arrays import BooleanArray2D, Uint8Array2D
@@ -189,8 +186,6 @@ class FacetBuilder:
     def calculate_bounding_box(self, points: List[Point]) -> BoundingBox:
         """Calculate the bounding box of a set of points.
 
-        OPTIMIZED: Uses NumPy min/max operations (10x faster).
-
         Args:
             points: Array of points
 
@@ -206,14 +201,21 @@ class FacetBuilder:
         if len(points) == 0:
             return BoundingBox()
 
-        # OPTIMIZATION: Vectorized bounding box calculation
-        coords = np.array([(pt.x, pt.y) for pt in points], dtype=np.int32)
-
         bbox = BoundingBox()
-        bbox.minX = int(coords[:, 0].min())
-        bbox.maxX = int(coords[:, 0].max())
-        bbox.minY = int(coords[:, 1].min())
-        bbox.maxY = int(coords[:, 1].max())
+        bbox.minX = float('inf')
+        bbox.minY = float('inf')
+        bbox.maxX = float('-inf')
+        bbox.maxY = float('-inf')
+
+        for pt in points:
+            if pt.x < bbox.minX:
+                bbox.minX = pt.x
+            if pt.x > bbox.maxX:
+                bbox.maxX = pt.x
+            if pt.y < bbox.minY:
+                bbox.minY = pt.y
+            if pt.y > bbox.maxY:
+                bbox.maxY = pt.y
 
         return bbox
 
@@ -284,8 +286,6 @@ class FacetBuilder:
         Checks which neighbor facets the given facet has by examining
         the neighbors at each border point.
 
-        OPTIMIZED: Uses NumPy for batched neighbor lookups (5-10x faster).
-
         Args:
             facet: Facet to find neighbors for
             facet_result: Result container with facet map
@@ -296,51 +296,15 @@ class FacetBuilder:
             >>> print(f"Facet {facet.id} has {len(facet.neighbourFacets)} neighbors")
         """
         facet.neighbourFacets = []
+        unique_facets: Set[int] = set()  # Poor man's set
 
-        if not facet.borderPoints:
-            facet.neighbourFacetsIsDirty = False
-            return
-
-        # OPTIMIZATION: Vectorized neighbor lookup
-        # Extract border point coordinates as NumPy arrays
-        border_coords = np.array([(pt.x, pt.y) for pt in facet.borderPoints], dtype=np.int32)
-
-        # Pre-allocate neighbor coordinate arrays (4-neighbors: left, right, up, down)
-        x_coords = border_coords[:, 0]
-        y_coords = border_coords[:, 1]
-
-        width = facet_result.width
-        height = facet_result.height
-
-        # Generate all 4-neighbor coordinates with bounds checking
-        neighbor_coords = []
-
-        # Left neighbors (x-1, y)
-        left_mask = x_coords > 0
-        if left_mask.any():
-            neighbor_coords.extend(zip(x_coords[left_mask] - 1, y_coords[left_mask]))
-
-        # Right neighbors (x+1, y)
-        right_mask = x_coords < width - 1
-        if right_mask.any():
-            neighbor_coords.extend(zip(x_coords[right_mask] + 1, y_coords[right_mask]))
-
-        # Up neighbors (x, y-1)
-        up_mask = y_coords > 0
-        if up_mask.any():
-            neighbor_coords.extend(zip(x_coords[up_mask], y_coords[up_mask] - 1))
-
-        # Down neighbors (x, y+1)
-        down_mask = y_coords < height - 1
-        if down_mask.any():
-            neighbor_coords.extend(zip(x_coords[down_mask], y_coords[down_mask] + 1))
-
-        # Batch lookup neighbor facet IDs
-        unique_facets: Set[int] = set()
-        for nx, ny in neighbor_coords:
-            neighbor_facet_id = facet_result.facetMap.get(int(nx), int(ny))  # type: ignore
-            if neighbor_facet_id != facet.id:
-                unique_facets.add(neighbor_facet_id)
+        for pt in facet.borderPoints:
+            # Get all 4-connected neighbors within bounds
+            neighbors = get_neighbors_4(pt.x, pt.y, facet_result.width, facet_result.height)
+            for neighbor in neighbors:
+                neighbor_facet_id = facet_result.facetMap.get(neighbor.x, neighbor.y)  # type: ignore
+                if neighbor_facet_id != facet.id:
+                    unique_facets.add(neighbor_facet_id)
 
         facet.neighbourFacets = list(unique_facets)
         # The neighbour array is updated so it's not dirty anymore
