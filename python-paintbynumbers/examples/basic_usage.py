@@ -133,12 +133,12 @@ def example_with_progress():
             print()
 
     settings = Settings()
-    settings.resizeImageWidth = 1000
-    settings.resizeImageHeight = 1000
+    settings.resizeImageWidth = 500
+    settings.resizeImageHeight = 500
     settings.kMeansNrOfClusters = 16
 
     PaintByNumbersPipeline.process_and_save(
-        input_path="input2.png",
+        input_path="input.png",
         output_path="output_progress",
         settings=settings,
         export_png=True,
