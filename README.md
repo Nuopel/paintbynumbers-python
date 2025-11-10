@@ -10,6 +10,7 @@ This is a Python port of the [TypeScript Paint by Numbers Generator](https://git
 
 ![](/home/nuopel/.config/marktext/images/2025-11-10-09-10-16-output_input_high.png)
 
+This project was a play around to learn how to use claude code, thus heavily using claude code. I did not tested all the exemples, only basic usage where i'm stuck with the following note in the dev part. 
 
 Important Note, the port version is inherently slower in python principaly due to the for loop dependency, especialy in the facet reduction part. To lessen the problem i implemented a batch version which speed up greatly this part at the cost of creating tiny artefact. I'd like to completely remove them but i'm not quite there yet.
 
