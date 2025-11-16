@@ -394,51 +394,50 @@ class FacetReducer:
                         all_affected.add(n_id)
 
         # Rebuild each affected facet once
+        # CRITICAL: Don't use flood fill! Absorbed pixels might be disconnected.
+        # Instead, directly scan facet_map to rebuild facet structure.
+        from paintbynumbers.structs.boundingbox import BoundingBox
+
         for fid in all_affected:
             facet = facets[fid]
             if facet is None:
                 continue
 
-            # CRITICAL FIX: Reset visited_cache for ALL pixels belonging to this facet
-            # Not just the old bounding box, because pixels from removed facets
-            # may be outside the old bbox and still have visited=True
-            # Scan the entire image to find all pixels with this facet ID
+            # Rebuild facet by scanning facet_map directly
+            new_facet = Facet()
+            new_facet.id = fid
+            new_facet.color = facet.color
+            new_facet.bbox = BoundingBox()
+            new_facet.borderPoints = []
+            new_facet.pointCount = 0
+            new_facet.neighbourFacetsIsDirty = True
+            new_facet.neighbourFacets = None
+
+            # Scan entire image to find all pixels belonging to this facet
             for y in range(facet_result.height):
                 for x in range(facet_result.width):
                     if facet_result.facetMap.get(x, y) == fid:
-                        visited_cache.set(x, y, False)
+                        new_facet.pointCount += 1
 
-            # Find any pixel belonging to this facet as starting point
-            # (old borderPoints may not include newly absorbed pixels)
-            start_x, start_y = None, None
-            for y in range(facet_result.height):
-                if start_x is not None:
-                    break
-                for x in range(facet_result.width):
-                    if facet_result.facetMap.get(x, y) == fid:
-                        start_x, start_y = x, y
-                        break
+                        # Update bounding box
+                        if x > new_facet.bbox.maxX:
+                            new_facet.bbox.maxX = x
+                        if y > new_facet.bbox.maxY:
+                            new_facet.bbox.maxY = y
+                        if x < new_facet.bbox.minX:
+                            new_facet.bbox.minX = x
+                        if y < new_facet.bbox.minY:
+                            new_facet.bbox.minY = y
 
-            if start_x is None:
-                # No pixels found for this facet - mark as None
+                        # Check if this is a border point
+                        is_inner_point = img_color_indices.match_all_around(x, y, new_facet.color)
+                        if not is_inner_point:
+                            new_facet.borderPoints.append(Point(x, y))
+
+            if new_facet.pointCount == 0:
                 facets[fid] = None
-                continue
-
-            # Rebuild from a valid starting point
-            new_facet = builder.build_facet(
-                fid,
-                facet.color,
-                start_x,
-                start_y,
-                visited_cache,
-                img_color_indices,
-                facet_result
-            )
-
-            facets[fid] = new_facet
-
-            if new_facet is not None and new_facet.pointCount == 0:
-                facets[fid] = None
+            else:
+                facets[fid] = new_facet
 
         # Mark neighbor lists as dirty
         for fid in all_affected:
