@@ -33,7 +33,8 @@ class SVGBuilder:
         stroke: bool = True,
         add_color_labels: bool = True,
         font_size: int = DEFAULT_FONT_SIZE,
-        font_color: str = DEFAULT_FONT_COLOR
+        font_color: str = DEFAULT_FONT_COLOR,
+        border_width: float = DEFAULT_STROKE_WIDTH
     ) -> str:
         """Create SVG string from facet result.
 
@@ -46,6 +47,7 @@ class SVGBuilder:
             add_color_labels: Whether to add color number labels
             font_size: Font size for labels
             font_color: Color for label text
+            border_width: Width of the border strokes
 
         Returns:
             SVG string content
@@ -99,7 +101,7 @@ class SVGBuilder:
             else:
                 path.set('stroke', 'none')
 
-            path.set('stroke-width', str(DEFAULT_STROKE_WIDTH))
+            path.set('stroke-width', str(border_width))
 
             # Set fill
             if fill:
