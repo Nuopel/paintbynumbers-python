@@ -96,14 +96,22 @@ class SVGBuilder:
             # Set stroke
             if stroke:
                 path.set('stroke', '#000')
+                stroke_width = border_width
             elif fill:
                 # Make border same color as fill to prevent gaps
+                # Use a much thicker stroke to fully cover gaps created by:
+                # 1. Haar wavelet path smoothing (reduces and averages path points)
+                # 2. Bezier curve smoothing (pulls paths inward from pixel boundaries)
                 rgb = colors_by_index[f.color]
                 path.set('stroke', f'rgb({rgb[0]},{rgb[1]},{rgb[2]})')
+                # Increase stroke width significantly to prevent gaps between regions
+                # The stroke is invisible (matches fill color) but covers smoothing gaps
+                stroke_width = max(4.0, border_width * 2)
             else:
                 path.set('stroke', 'none')
+                stroke_width = border_width
 
-            path.set('stroke-width', str(border_width))
+            path.set('stroke-width', str(stroke_width))
 
             # Set fill
             if fill:
