@@ -23,6 +23,7 @@ class OutputProfile:
     svgSizeMultiplier: float = 3.0
     svgFontSize: int = 20
     svgFontColor: str = "#000000"
+    svgBorderWidth: float = 1.0  # Width of borders/strokes in SVG
     filetypeQuality: float = 0.92  # For JPEG quality
 
 
@@ -72,7 +73,8 @@ class Settings:
             svgFillFacets=True,
             svgSizeMultiplier=3.0,
             svgFontSize=20,
-            svgFontColor="#000000"
+            svgFontColor="#000000",
+            svgBorderWidth=1.0
         )
     ])
 
@@ -137,6 +139,7 @@ class Settings:
                     "svgSizeMultiplier": p.svgSizeMultiplier,
                     "svgFontSize": p.svgFontSize,
                     "svgFontColor": p.svgFontColor,
+                    "svgBorderWidth": p.svgBorderWidth,
                     "filetypeQuality": p.filetypeQuality,
                 }
                 for p in self.outputProfiles

@@ -119,6 +119,12 @@ def _progress_callback(stage: str, progress: float) -> None:
     help='Label font color (default: #000000)'
 )
 @click.option(
+    '--border-width',
+    type=float,
+    default=1.0,
+    help='Border/stroke width in SVG (default: 1.0)'
+)
+@click.option(
     '--seed',
     type=int,
     help='Random seed for reproducibility'
@@ -153,6 +159,7 @@ def main(
     scale: float,
     font_size: int,
     font_color: str,
+    border_width: float,
     seed: Optional[int],
     quiet: bool,
     save_config: Optional[str]
@@ -230,7 +237,8 @@ def main(
             svgFillFacets=fill_facets,
             svgSizeMultiplier=scale,
             svgFontSize=font_size,
-            svgFontColor=font_color
+            svgFontColor=font_color,
+            svgBorderWidth=border_width
         )
         settings.outputProfiles = [profile]
 

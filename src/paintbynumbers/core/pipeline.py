@@ -176,7 +176,8 @@ class PaintByNumbersPipeline:
             stroke=profile.svgShowBorders,
             add_color_labels=profile.svgShowLabels,
             font_size=profile.svgFontSize,
-            font_color=profile.svgFontColor
+            font_color=profile.svgFontColor,
+            border_width=profile.svgBorderWidth
         )
         update("Generating SVG", 1.0)
 
