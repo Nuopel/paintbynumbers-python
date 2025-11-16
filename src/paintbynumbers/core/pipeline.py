@@ -184,6 +184,7 @@ class PaintByNumbersPipeline:
             stroke=profile.svgShowBorders,
             add_color_labels=profile.svgShowLabels,
             font_size=profile.svgFontSize,
+            min_font_size=profile.svgMinFontSize,
             font_color=profile.svgFontColor,
             border_width=profile.svgBorderWidth,
             label_start_number=profile.svgLabelStartNumber
