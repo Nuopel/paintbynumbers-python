@@ -60,9 +60,11 @@ class FacetBorderTracer:
             if f is None:
                 continue
 
-            # Set border mask
+            # OPTIMIZED: Set border mask with direct array access
+            border_mask_arr = border_mask._arr
+            width = facet_result.width
             for bp in f.borderPoints:
-                border_mask.set(bp.x, bp.y, True)
+                border_mask_arr[bp.y * width + bp.x] = 1
 
             # Keep track of which walls are already set on each pixel
             # xWall.get(x, y) is the left wall of point x,y
@@ -175,16 +177,20 @@ class FacetBorderTracer:
             else:
                 finished = True
 
-        # Clear the walls for reuse
+        # OPTIMIZED: Clear the walls for reuse with direct array access
+        x_wall_arr = x_wall._arr
+        y_wall_arr = y_wall._arr
+        wall_width = x_wall.width
+
         for path_point in path:
             if path_point.orientation == OrientationEnum.Left:
-                x_wall.set(path_point.x, path_point.y, False)
+                x_wall_arr[path_point.y * wall_width + path_point.x] = 0
             elif path_point.orientation == OrientationEnum.Top:
-                y_wall.set(path_point.x, path_point.y, False)
+                y_wall_arr[path_point.y * wall_width + path_point.x] = 0
             elif path_point.orientation == OrientationEnum.Right:
-                x_wall.set(path_point.x + 1, path_point.y, False)
+                x_wall_arr[path_point.y * wall_width + (path_point.x + 1)] = 0
             elif path_point.orientation == OrientationEnum.Bottom:
-                y_wall.set(path_point.x, path_point.y + 1, False)
+                y_wall_arr[(path_point.y + 1) * wall_width + path_point.x] = 0
 
         return path
 
@@ -197,6 +203,8 @@ class FacetBorderTracer:
     ) -> None:
         """Add a point to the border path and set the corresponding wall.
 
+        OPTIMIZED: Uses direct array access for faster wall setting.
+
         Args:
             path: Path list to append to
             pt: PathPoint to add
@@ -205,14 +213,19 @@ class FacetBorderTracer:
         """
         path.append(pt)
 
+        # OPTIMIZED: Direct array access
+        x_wall_arr = x_wall._arr
+        y_wall_arr = y_wall._arr
+        wall_width = x_wall.width
+
         if pt.orientation == OrientationEnum.Left:
-            x_wall.set(pt.x, pt.y, True)
+            x_wall_arr[pt.y * wall_width + pt.x] = 1
         elif pt.orientation == OrientationEnum.Top:
-            y_wall.set(pt.x, pt.y, True)
+            y_wall_arr[pt.y * wall_width + pt.x] = 1
         elif pt.orientation == OrientationEnum.Right:
-            x_wall.set(pt.x + 1, pt.y, True)
+            x_wall_arr[pt.y * wall_width + (pt.x + 1)] = 1
         elif pt.orientation == OrientationEnum.Bottom:
-            y_wall.set(pt.x, pt.y + 1, True)
+            y_wall_arr[(pt.y + 1) * wall_width + pt.x] = 1
 
     @staticmethod
     def _check_left_orientation(
