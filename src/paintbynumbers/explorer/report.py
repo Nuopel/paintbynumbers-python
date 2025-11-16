@@ -639,13 +639,18 @@ class HTMLReportGenerator:
 
     def _get_card(self, result: VariationResult) -> str:
         """Generate HTML for a single result card."""
-        # Prepare image path (relative to HTML file)
-        if result.success and 'png' in result.output_paths:
-            # Make path relative to output directory
-            rel_path = result.output_paths['png'].relative_to(self.output_dir)
-            img_src = str(rel_path).replace('\\', '/')
-        else:
-            img_src = ""
+        # Prepare image paths (relative to HTML file)
+        png_src = ""
+        svg_src = ""
+
+        if result.success:
+            if 'png' in result.output_paths:
+                rel_path = result.output_paths['png'].relative_to(self.output_dir)
+                png_src = str(rel_path).replace('\\', '/')
+
+            if 'svg' in result.output_paths:
+                rel_path = result.output_paths['svg'].relative_to(self.output_dir)
+                svg_src = str(rel_path).replace('\\', '/')
 
         # Get parameters that differ from baseline
         param_items = []
@@ -706,6 +711,8 @@ class HTMLReportGenerator:
                 data-diversity="{m.color_diversity_score:.2f}"
                 data-complexity="{m.avg_border_complexity:.1f}"
                 data-index="{result.variation_index}"
+                data-png-src="{png_src}"
+                data-svg-src="{svg_src}"
             """
 
         error_class = "" if result.success else " error"
@@ -714,7 +721,7 @@ class HTMLReportGenerator:
                        id="card-{result.variation_index}"
                        {data_attrs}
                        onclick="selectCard(this, event)">
-        {f'<img class="card-image" src="{img_src}" alt="{result.variation_id}" onclick="openModal(event, this.src)">' if img_src else '<div class="card-image" style="display: flex; align-items: center; justify-content: center; color: #999;">No preview</div>'}
+        {f'<img class="card-image" src="{png_src}" alt="{result.variation_id}" onclick="openModal(event, this.src)">' if png_src else '<div class="card-image" style="display: flex; align-items: center; justify-content: center; color: #999;">No preview</div>'}
         <div class="card-content">
             <div class="card-title">{result.variation_id}</div>
             <div class="card-params">
@@ -925,13 +932,32 @@ class HTMLReportGenerator:
             isListView = !isListView;
             const grid = document.getElementById('results-grid');
             const button = document.getElementById('toggle-view');
+            const cards = grid.querySelectorAll('.card');
 
             if (isListView) {{
                 grid.classList.add('list-view');
                 button.textContent = '🔲 Switch to Grid View';
+
+                // Switch to high-res SVG images for list view
+                cards.forEach(card => {{
+                    const img = card.querySelector('.card-image');
+                    const svgSrc = card.dataset.svgSrc;
+                    if (img && svgSrc) {{
+                        img.src = svgSrc;
+                    }}
+                }});
             }} else {{
                 grid.classList.remove('list-view');
                 button.textContent = '📋 Switch to List View (larger images)';
+
+                // Switch back to PNG thumbnails for grid view
+                cards.forEach(card => {{
+                    const img = card.querySelector('.card-image');
+                    const pngSrc = card.dataset.pngSrc;
+                    if (img && pngSrc) {{
+                        img.src = pngSrc;
+                    }}
+                }});
             }}
         }}
 
@@ -966,15 +992,16 @@ class HTMLReportGenerator:
 
             currentModalIndex = index;
             const card = visibleCards[index];
-            const img = card.querySelector('.card-image');
 
             // Update modal image
             const modal = document.getElementById('image-modal');
             const modalImg = document.getElementById('modal-image');
 
-            // Use SVG for better quality in modal
-            const svgSrc = img.src.replace('preview.png', 'output.svg');
-            modalImg.src = svgSrc;
+            // Always use SVG for better quality in modal
+            const svgSrc = card.dataset.svgSrc;
+            if (svgSrc) {{
+                modalImg.src = svgSrc;
+            }}
 
             // Update counter and title
             const counter = document.getElementById('modal-counter');
