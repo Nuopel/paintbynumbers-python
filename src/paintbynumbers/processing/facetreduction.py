@@ -204,7 +204,7 @@ class FacetReducer:
                         if closest_neigh_id != -1:
                             neigh = facets[closest_neigh_id]
                             if neigh is not None:
-                                pixel_assignments.append((x, y, neigh.color))
+                                pixel_assignments.append((x, y, neigh.color, closest_neigh_id))
                                 affected_facets.add(closest_neigh_id)
                         else:
                             # No valid neighbor found - mark as orphaned
@@ -212,8 +212,9 @@ class FacetReducer:
 
         # Apply assignments
         processed = 0
-        for x, y, new_color in pixel_assignments:
+        for x, y, new_color, new_facet_id in pixel_assignments:
             img_color_indices.set(x, y, new_color)
+            facet_map.set(x, y, new_facet_id)  # CRITICAL: Update facet map to prevent holes
             processed += 1
 
             if on_progress is not None and processed % 1000 == 0:
@@ -275,6 +276,7 @@ class FacetReducer:
                             if neighbor_facet is not None:
                                 # Assign this pixel to the found neighbor
                                 img_color_indices.set(x, y, neighbor_facet.color)
+                                facet_map.set(x, y, neighbor_id)  # CRITICAL: Update facet map
                                 newly_affected.add(neighbor_id)
                                 found_neighbor = True
                                 break
@@ -290,6 +292,7 @@ class FacetReducer:
                             neighbor_facet = facets[neighbor_id]
                             if neighbor_facet is not None:
                                 img_color_indices.set(x, y, neighbor_facet.color)
+                                facet_map.set(x, y, neighbor_id)  # CRITICAL: Update facet map
                                 newly_affected.add(neighbor_id)
                                 break
 
