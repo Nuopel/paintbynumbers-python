@@ -396,25 +396,40 @@ class FacetReducer:
         # Rebuild each affected facet once
         for fid in all_affected:
             facet = facets[fid]
-            if facet is None or not facet.borderPoints:
+            if facet is None:
                 continue
 
-            # Reset visited array
-            min_x, max_x = facet.bbox.minX, facet.bbox.maxX
-            min_y, max_y = facet.bbox.minY, facet.bbox.maxY
-
-            for y in range(min_y, max_y + 1):
-                for x in range(min_x, max_x + 1):
+            # CRITICAL FIX: Reset visited_cache for ALL pixels belonging to this facet
+            # Not just the old bounding box, because pixels from removed facets
+            # may be outside the old bbox and still have visited=True
+            # Scan the entire image to find all pixels with this facet ID
+            for y in range(facet_result.height):
+                for x in range(facet_result.width):
                     if facet_result.facetMap.get(x, y) == fid:
                         visited_cache.set(x, y, False)
 
-            # Rebuild
-            bp = facet.borderPoints[0]
+            # Find any pixel belonging to this facet as starting point
+            # (old borderPoints may not include newly absorbed pixels)
+            start_x, start_y = None, None
+            for y in range(facet_result.height):
+                if start_x is not None:
+                    break
+                for x in range(facet_result.width):
+                    if facet_result.facetMap.get(x, y) == fid:
+                        start_x, start_y = x, y
+                        break
+
+            if start_x is None:
+                # No pixels found for this facet - mark as None
+                facets[fid] = None
+                continue
+
+            # Rebuild from a valid starting point
             new_facet = builder.build_facet(
                 fid,
                 facet.color,
-                bp.x,
-                bp.y,
+                start_x,
+                start_y,
                 visited_cache,
                 img_color_indices,
                 facet_result
