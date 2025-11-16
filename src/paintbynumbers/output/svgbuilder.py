@@ -177,17 +177,28 @@ class SVGBuilder:
         label_x = (facet.labelBounds.minX + facet.labelBounds.maxX) / 2
         label_y = (facet.labelBounds.minY + facet.labelBounds.maxY) / 2
 
+        # Calculate available space in the label bounds
+        label_width = abs(facet.labelBounds.maxX - facet.labelBounds.minX)
+        label_height = abs(facet.labelBounds.maxY - facet.labelBounds.minY)
+        available_space = min(label_width, label_height)
+
         # Adjust font size based on number of digits
         label_text = str(facet.color + label_start_number)
         nr_of_digits = len(label_text)
         adjusted_font_size = font_size / nr_of_digits
+
+        # Scale font size based on available space in the facet
+        # Use a conservative factor to ensure text fits well within the bounds
+        # The factor 0.4 ensures the text takes up roughly 40% of the available space
+        space_based_font_size = available_space * 0.4
+        final_font_size = min(adjusted_font_size, space_based_font_size)
 
         # Create text element
         text = ET.SubElement(svg, 'text')
         text.set('x', str(label_x * size_multiplier))
         text.set('y', str(label_y * size_multiplier))
         text.set('font-family', 'Tahoma')
-        text.set('font-size', str(adjusted_font_size))
+        text.set('font-size', str(final_font_size * size_multiplier))
         text.set('dominant-baseline', 'middle')
         text.set('text-anchor', 'middle')
         text.set('fill', font_color)
