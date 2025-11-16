@@ -232,6 +232,31 @@ class HTMLReportGenerator:
             gap: 25px;
         }
 
+        /* List view mode - one per line with larger images */
+        .grid.list-view {
+            grid-template-columns: 1fr;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .grid.list-view .card {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+        }
+
+        .grid.list-view .card-image {
+            width: 60%;
+            height: auto;
+            min-height: 500px;
+            max-height: 700px;
+        }
+
+        .grid.list-view .card-content {
+            width: 40%;
+            overflow-y: auto;
+        }
+
         .card {
             background: white;
             border-radius: 10px;
@@ -345,40 +370,109 @@ class HTMLReportGenerator:
             top: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.8);
-            overflow: auto;
+            background: rgba(0,0,0,0.95);
+            overflow: hidden;
         }
 
         .modal.active {
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-direction: column;
         }
 
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 90%;
-            max-height: 90%;
-            overflow: auto;
+        .modal-header {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 40px;
+            color: white;
+            z-index: 1001;
+        }
+
+        .modal-counter {
+            font-size: 1.2em;
+            font-weight: 500;
+        }
+
+        .modal-title {
+            font-size: 1.1em;
+            color: #ddd;
         }
 
         .modal-close {
-            float: right;
-            font-size: 2em;
+            font-size: 2.5em;
             cursor: pointer;
-            color: #999;
+            color: white;
+            line-height: 1;
+            transition: color 0.2s;
         }
 
         .modal-close:hover {
-            color: #333;
+            color: #3498db;
+        }
+
+        .modal-content {
+            position: relative;
+            max-width: 95vw;
+            max-height: 85vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .modal-image {
-            width: 100%;
-            max-width: 1200px;
+            max-width: 100%;
+            max-height: 85vh;
+            width: auto;
             height: auto;
+            object-fit: contain;
+        }
+
+        .modal-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 3em;
+            color: white;
+            cursor: pointer;
+            padding: 20px;
+            user-select: none;
+            transition: color 0.2s, transform 0.2s;
+            z-index: 1001;
+        }
+
+        .modal-nav:hover {
+            color: #3498db;
+            transform: translateY(-50%) scale(1.2);
+        }
+
+        .modal-nav.prev {
+            left: 20px;
+        }
+
+        .modal-nav.next {
+            right: 20px;
+        }
+
+        .modal-nav.disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .modal-help {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #999;
+            font-size: 0.9em;
+            text-align: center;
         }
 
         @media (max-width: 768px) {
@@ -444,6 +538,15 @@ class HTMLReportGenerator:
         """Generate filter and sort controls."""
         return """<div class="controls">
         <h2>Filter & Sort</h2>
+
+        <div class="filter-section">
+            <label class="filter-label">View Mode</label>
+            <div class="sort-controls">
+                <button id="toggle-view" onclick="toggleViewMode()">
+                    📋 Switch to List View (larger images)
+                </button>
+            </div>
+        </div>
 
         <div class="filter-section">
             <label class="filter-label">Filter by Metrics</label>
@@ -515,11 +618,22 @@ class HTMLReportGenerator:
         {cards_html if cards else '<div class="no-results">No results to display</div>'}
     </div>
 
-    <!-- Modal for full-size image -->
+    <!-- Modal for full-size image viewer with navigation -->
     <div id="image-modal" class="modal" onclick="closeModal()">
-        <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <div>
+                <div class="modal-counter" id="modal-counter">1 / 10</div>
+                <div class="modal-title" id="modal-title">Variation Title</div>
+            </div>
             <span class="modal-close" onclick="closeModal()">&times;</span>
+        </div>
+        <div class="modal-nav prev" onclick="navigateModal(-1)">&#8249;</div>
+        <div class="modal-content" onclick="event.stopPropagation()">
             <img id="modal-image" class="modal-image" src="" alt="Full size">
+        </div>
+        <div class="modal-nav next" onclick="navigateModal(1)">&#8250;</div>
+        <div class="modal-help">
+            Use ← → arrow keys or click arrows to navigate | ESC to close
         </div>
     </div>"""
 
@@ -804,12 +918,87 @@ class HTMLReportGenerator:
             }});
         }}
 
+        // View mode toggle
+        let isListView = false;
+
+        function toggleViewMode() {{
+            isListView = !isListView;
+            const grid = document.getElementById('results-grid');
+            const button = document.getElementById('toggle-view');
+
+            if (isListView) {{
+                grid.classList.add('list-view');
+                button.textContent = '🔲 Switch to Grid View';
+            }} else {{
+                grid.classList.remove('list-view');
+                button.textContent = '📋 Switch to List View (larger images)';
+            }}
+        }}
+
+        // Modal navigation
+        let currentModalIndex = 0;
+        let visibleCards = [];
+
+        function getVisibleCards() {{
+            const grid = document.getElementById('results-grid');
+            return Array.from(grid.querySelectorAll('.card'))
+                .filter(card => card.style.display !== 'none');
+        }}
+
         function openModal(event, src) {{
             event.stopPropagation();
+
+            // Get the card element
+            const cardElement = event.target.closest('.card');
+
+            // Update visible cards list
+            visibleCards = getVisibleCards();
+
+            // Find current card index
+            currentModalIndex = visibleCards.findIndex(card => card === cardElement);
+
+            // Show modal
+            showModalImage(currentModalIndex);
+        }}
+
+        function showModalImage(index) {{
+            if (index < 0 || index >= visibleCards.length) return;
+
+            currentModalIndex = index;
+            const card = visibleCards[index];
+            const img = card.querySelector('.card-image');
+
+            // Update modal image
             const modal = document.getElementById('image-modal');
             const modalImg = document.getElementById('modal-image');
-            modalImg.src = src;
+
+            // Use SVG for better quality in modal
+            const svgSrc = img.src.replace('preview.png', 'output.svg');
+            modalImg.src = svgSrc;
+
+            // Update counter and title
+            const counter = document.getElementById('modal-counter');
+            const title = document.getElementById('modal-title');
+            const cardTitle = card.querySelector('.card-title');
+
+            counter.textContent = `${{index + 1}} / ${{visibleCards.length}}`;
+            title.textContent = cardTitle ? cardTitle.textContent : '';
+
+            // Update navigation button states
+            const prevBtn = document.querySelector('.modal-nav.prev');
+            const nextBtn = document.querySelector('.modal-nav.next');
+
+            prevBtn.classList.toggle('disabled', index === 0);
+            nextBtn.classList.toggle('disabled', index === visibleCards.length - 1);
+
             modal.classList.add('active');
+        }}
+
+        function navigateModal(direction) {{
+            const newIndex = currentModalIndex + direction;
+            if (newIndex >= 0 && newIndex < visibleCards.length) {{
+                showModalImage(newIndex);
+            }}
         }}
 
         function closeModal() {{
@@ -817,12 +1006,27 @@ class HTMLReportGenerator:
             modal.classList.remove('active');
         }}
 
-        // Keyboard shortcut: Escape to close modal
+        // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {{
+            const modal = document.getElementById('image-modal');
+            const isModalOpen = modal.classList.contains('active');
+
             if (e.key === 'Escape') {{
-                closeModal();
-                if (comparisonMode) {{
+                if (isModalOpen) {{
+                    closeModal();
+                }} else if (comparisonMode) {{
                     toggleComparisonMode();
+                }}
+            }}
+
+            if (isModalOpen) {{
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {{
+                    e.preventDefault();
+                    navigateModal(-1);
+                }}
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {{
+                    e.preventDefault();
+                    navigateModal(1);
                 }}
             }}
         }});
