@@ -339,8 +339,232 @@ def cli_group():
     pass
 
 
+@click.command()
+@click.argument('input_path', type=click.Path(exists=True))
+@click.option(
+    '--config', '-c',
+    type=click.Path(exists=True),
+    help='Path to JSON explorer configuration file'
+)
+@click.option(
+    '--preset',
+    type=click.Choice(['quick_test', 'detailed_photos', 'simple_illustrations',
+                       'color_space_comparison', 'cluster_exploration']),
+    help='Use a preset configuration'
+)
+@click.option(
+    '--output-dir', '-o',
+    type=click.Path(),
+    help='Output directory (default: results/{image_name}/{timestamp})'
+)
+@click.option(
+    '--strategy',
+    type=click.Choice(['grid', 'star', 'random'], case_sensitive=False),
+    help='Exploration strategy (overrides config/preset)'
+)
+@click.option(
+    '--parallel/--sequential',
+    default=True,
+    help='Process variations in parallel (default: enabled)'
+)
+@click.option(
+    '--workers',
+    type=int,
+    help='Number of parallel workers (default: CPU count)'
+)
+@click.option(
+    '--no-save',
+    is_flag=True,
+    help='Skip saving intermediate outputs (faster)'
+)
+@click.option(
+    '--quiet', '-q',
+    is_flag=True,
+    help='Suppress progress output'
+)
+def explore(
+    input_path: str,
+    config: Optional[str],
+    preset: Optional[str],
+    output_dir: Optional[str],
+    strategy: Optional[str],
+    parallel: bool,
+    workers: Optional[int],
+    no_save: bool,
+    quiet: bool,
+) -> None:
+    """Explore parameter variations for paint-by-numbers generation.
+
+    INPUT_PATH: Path to input image file
+
+    This command generates multiple variations of paint-by-numbers output
+    with different parameter combinations and creates an interactive HTML
+    report for comparing results.
+
+    Examples:
+
+      \b
+      # Quick test with preset configuration
+      $ paintbynumbers explore input.jpg --preset quick_test
+
+      \b
+      # Use custom configuration file
+      $ paintbynumbers explore input.jpg --config explorer.json
+
+      \b
+      # Override strategy from config
+      $ paintbynumbers explore input.jpg --preset cluster_exploration --strategy star
+
+      \b
+      # Disable parallel processing and intermediate saves (slower but less disk)
+      $ paintbynumbers explore input.jpg --preset quick_test --sequential --no-save
+    """
+    if not CLICK_AVAILABLE:
+        click.echo("Error: Click is required. Install with: pip install click")
+        sys.exit(1)
+
+    try:
+        from paintbynumbers.explorer import (
+            ExplorerConfig,
+            ExplorationEngine,
+            HTMLReportGenerator,
+            get_preset,
+            ExplorationStrategy
+        )
+
+        # Load configuration
+        if config:
+            explorer_config = ExplorerConfig.from_json(config)
+            if not quiet:
+                click.echo(f"Loaded explorer configuration from {config}")
+        elif preset:
+            explorer_config = get_preset(preset)
+            if not quiet:
+                click.echo(f"Using preset: {preset}")
+        else:
+            # Default to quick_test preset
+            explorer_config = get_preset('quick_test')
+            if not quiet:
+                click.echo("Using default preset: quick_test")
+
+        # Override with command-line options
+        if output_dir:
+            explorer_config.output_dir = Path(output_dir)
+        if strategy:
+            explorer_config.strategy = ExplorationStrategy(strategy.upper())
+        explorer_config.parallel_processing = parallel
+        if workers:
+            explorer_config.max_workers = workers
+        if no_save:
+            explorer_config.save_intermediate = False
+
+        # Display exploration info
+        if not quiet:
+            click.echo(f"\nInput image: {input_path}")
+            click.echo(f"Strategy: {explorer_config.strategy.value}")
+            click.echo(f"Total variations: {explorer_config.get_total_combinations()}")
+            click.echo(f"Parallel processing: {explorer_config.parallel_processing}")
+            if explorer_config.parallel_processing:
+                max_w = explorer_config.max_workers or "auto"
+                click.echo(f"Workers: {max_w}")
+            click.echo("")
+
+        # Create progress callback
+        def progress_callback(current, total, message):
+            if not quiet:
+                click.echo(f"Progress: [{current}/{total}] {message}")
+
+        # Run exploration
+        engine = ExplorationEngine(
+            config=explorer_config,
+            input_image=Path(input_path),
+            output_dir=explorer_config.output_dir,
+            progress_callback=progress_callback if not quiet else None,
+        )
+
+        results = engine.run()
+
+        # Generate HTML report
+        if not quiet:
+            click.echo("\nGenerating HTML report...")
+
+        report_path = engine.output_dir / "report.html"
+        report_generator = HTMLReportGenerator(results, engine.output_dir)
+        report_generator.generate(report_path)
+
+        if not quiet:
+            click.echo(f"\n✓ Exploration complete!")
+            click.echo(f"  Results directory: {engine.output_dir}")
+            click.echo(f"  HTML report: {report_path}")
+            click.echo(f"\nOpen the report in your browser to compare variations:")
+            click.echo(f"  file://{report_path.absolute()}")
+
+    except KeyboardInterrupt:
+        click.echo("\n\nExploration interrupted by user.", err=True)
+        sys.exit(130)
+    except Exception as e:
+        click.echo(f"\nError: {e}", err=True)
+        if not quiet:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
+
+
+@click.command()
+@click.option(
+    '--output', '-o',
+    type=click.Path(),
+    default='explorer_config.json',
+    help='Output file path (default: explorer_config.json)'
+)
+@click.option(
+    '--preset',
+    type=click.Choice(['quick_test', 'detailed_photos', 'simple_illustrations',
+                       'color_space_comparison', 'cluster_exploration']),
+    help='Base configuration on a preset'
+)
+def init_explorer_config(output: str, preset: Optional[str]) -> None:
+    """Create a configuration file for the explorer.
+
+    This generates a JSON configuration file with exploration settings
+    that can be customized and used with the explore command.
+
+    Example:
+
+      \b
+      $ paintbynumbers init-explorer-config --output my-explorer.json --preset quick_test
+      $ paintbynumbers explore input.jpg --config my-explorer.json
+    """
+    if not CLICK_AVAILABLE:
+        click.echo("Error: Click is required. Install with: pip install click")
+        sys.exit(1)
+
+    try:
+        from paintbynumbers.explorer import ExplorerConfig, get_preset
+
+        if preset:
+            config = get_preset(preset)
+            click.echo(f"Using preset: {preset}")
+        else:
+            config = ExplorerConfig()
+
+        config.to_json(output)
+        click.echo(f"✓ Explorer configuration file created: {output}")
+        click.echo(f"\nStrategy: {config.strategy.value}")
+        click.echo(f"Total variations: {config.get_total_combinations()}")
+        click.echo("\nEdit this file to customize exploration settings, then use it with:")
+        click.echo(f"  paintbynumbers explore input.jpg --config {output}")
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 cli_group.add_command(main, 'generate')
 cli_group.add_command(init_config, 'init-config')
+cli_group.add_command(explore, 'explore')
+cli_group.add_command(init_explorer_config, 'init-explorer-config')
 
 
 if __name__ == '__main__':

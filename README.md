@@ -71,6 +71,36 @@ PaintByNumbersPipeline.process_and_save(
 
                                                                                                                                                               ![](/home/nuopel/.config/marktext/images/2025-11-10-09-10-22-output_input_medium.png)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
 
+## 🔍 Parameter Explorer
+
+The Explorer tool helps you find optimal settings by systematically testing different parameter combinations and presenting results in an interactive HTML report.
+
+```bash
+# Quick exploration with preset
+paintbynumbers explore input.jpg --preset quick_test
+
+# Custom configuration
+paintbynumbers init-explorer-config --output my-config.json
+# Edit my-config.json, then:
+paintbynumbers explore input.jpg --config my-config.json
+```
+
+**Features:**
+- 🔄 Multiple exploration strategies (grid, star, random)
+- 📊 Automatic quality metrics collection
+- 🌐 Interactive HTML report with filtering/sorting
+- 🖼️ Side-by-side comparison view
+- ⚡ Parallel processing support
+
+**Available Presets:**
+- `quick_test` - Fast exploration (3 variations)
+- `detailed_photos` - Optimized for photographs
+- `simple_illustrations` - For cartoons and simple graphics
+- `color_space_comparison` - Compare RGB vs LAB vs HSL
+- `cluster_exploration` - Find optimal cluster count
+
+See [Explorer Documentation](docs/EXPLORER.md) for detailed usage.
+
 ## 📖 Documentation
 
 ### CLI Commands
