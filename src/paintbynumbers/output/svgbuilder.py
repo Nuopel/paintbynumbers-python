@@ -68,6 +68,8 @@ class SVGBuilder:
         svg.set('width', str(int(size_multiplier * facet_result.width)))
         svg.set('height', str(int(size_multiplier * facet_result.height)))
         svg.set('viewBox', f'0 0 {int(size_multiplier * facet_result.width)} {int(size_multiplier * facet_result.height)}')
+        # Force better rendering to prevent gaps between paths
+        svg.set('shape-rendering', 'geometricPrecision')
 
         # Process each facet
         for f in facet_result.facets:
@@ -85,8 +87,10 @@ class SVGBuilder:
                 newpath[0].y != newpath[-1].y):
                 newpath.append(Point(newpath[0].x, newpath[0].y))
 
-            # Create SVG path with quadratic Bezier curves for smoothness
-            path_data = SVGBuilder._create_path_data(newpath, size_multiplier)
+            # When filling without borders, use straight lines for pixel-perfect rendering
+            # When showing borders, use Bezier curves for smooth appearance
+            use_straight_lines = (fill and not stroke)
+            path_data = SVGBuilder._create_path_data(newpath, size_multiplier, use_straight_lines)
 
             # Create path element
             path = ET.SubElement(svg, 'path')
@@ -128,15 +132,17 @@ class SVGBuilder:
         return SVGBuilder._element_to_string(svg)
 
     @staticmethod
-    def _create_path_data(path: List[Point], size_multiplier: float) -> str:
-        """Create SVG path data with quadratic Bezier curves.
+    def _create_path_data(path: List[Point], size_multiplier: float, use_straight_lines: bool = False) -> str:
+        """Create SVG path data with quadratic Bezier curves or straight lines.
 
         Uses quadratic curves (Q command) for smooth, natural-looking paths
         by placing control points at midpoints between consecutive points.
+        Alternatively, uses straight lines (L command) for pixel-perfect rendering.
 
         Args:
             path: List of points forming the path
             size_multiplier: Scale factor
+            use_straight_lines: If True, use L commands instead of Q commands
 
         Returns:
             SVG path data string
@@ -147,15 +153,20 @@ class SVGBuilder:
         # Start with Move command
         data = f"M {path[0].x * size_multiplier} {path[0].y * size_multiplier} "
 
-        # Add quadratic Bezier curves
-        for i in range(1, len(path)):
-            # Control point is at midpoint between consecutive points
-            midpoint_x = (path[i].x + path[i - 1].x) / 2
-            midpoint_y = (path[i].y + path[i - 1].y) / 2
+        if use_straight_lines:
+            # Use straight line segments for pixel-perfect rendering
+            for i in range(1, len(path)):
+                data += f"L {path[i].x * size_multiplier} {path[i].y * size_multiplier} "
+        else:
+            # Add quadratic Bezier curves for smooth appearance
+            for i in range(1, len(path)):
+                # Control point is at midpoint between consecutive points
+                midpoint_x = (path[i].x + path[i - 1].x) / 2
+                midpoint_y = (path[i].y + path[i - 1].y) / 2
 
-            # Q control_x control_y end_x end_y
-            data += f"Q {midpoint_x * size_multiplier} {midpoint_y * size_multiplier} "
-            data += f"{path[i].x * size_multiplier} {path[i].y * size_multiplier} "
+                # Q control_x control_y end_x end_y
+                data += f"Q {midpoint_x * size_multiplier} {midpoint_y * size_multiplier} "
+                data += f"{path[i].x * size_multiplier} {path[i].y * size_multiplier} "
 
         # Close path
         data += "Z"
