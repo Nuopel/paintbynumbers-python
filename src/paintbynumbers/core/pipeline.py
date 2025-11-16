@@ -241,3 +241,5 @@ class PaintByNumbersPipeline:
             jpg_path = f"{output_path}.jpg"
             quality = int(profile.filetypeQuality * 100)
             RasterExporter.export_jpg(result.svg_content, jpg_path, quality=quality, scale=profile.svgSizeMultiplier)
+
+        return result
