@@ -286,6 +286,8 @@ class FacetBuilder:
         Checks which neighbor facets the given facet has by examining
         the neighbors at each border point.
 
+        OPTIMIZED: Uses direct array access and set operations for faster neighbor detection.
+
         Args:
             facet: Facet to find neighbors for
             facet_result: Result container with facet map
@@ -295,16 +297,42 @@ class FacetBuilder:
             >>> builder.build_facet_neighbour(facet, facet_result)
             >>> print(f"Facet {facet.id} has {len(facet.neighbourFacets)} neighbors")
         """
-        facet.neighbourFacets = []
-        unique_facets: Set[int] = set()  # Poor man's set
+        unique_facets: Set[int] = set()
 
+        # Direct access to underlying array for faster lookups
+        facet_map_arr = facet_result.facetMap._arr
+        width = facet_result.width
+        height = facet_result.height
+        facet_id = facet.id
+
+        # OPTIMIZED: Check all 4-connected neighbors with direct array access
         for pt in facet.borderPoints:
-            # Get all 4-connected neighbors within bounds
-            neighbors = get_neighbors_4(pt.x, pt.y, facet_result.width, facet_result.height)
-            for neighbor in neighbors:
-                neighbor_facet_id = facet_result.facetMap.get(neighbor.x, neighbor.y)  # type: ignore
-                if neighbor_facet_id != facet.id:
-                    unique_facets.add(neighbor_facet_id)
+            x, y = pt.x, pt.y
+            idx = y * width + x
+
+            # Check left neighbor
+            if x > 0:
+                neighbor_id = int(facet_map_arr[idx - 1])
+                if neighbor_id != facet_id:
+                    unique_facets.add(neighbor_id)
+
+            # Check right neighbor
+            if x < width - 1:
+                neighbor_id = int(facet_map_arr[idx + 1])
+                if neighbor_id != facet_id:
+                    unique_facets.add(neighbor_id)
+
+            # Check top neighbor
+            if y > 0:
+                neighbor_id = int(facet_map_arr[idx - width])
+                if neighbor_id != facet_id:
+                    unique_facets.add(neighbor_id)
+
+            # Check bottom neighbor
+            if y < height - 1:
+                neighbor_id = int(facet_map_arr[idx + width])
+                if neighbor_id != facet_id:
+                    unique_facets.add(neighbor_id)
 
         facet.neighbourFacets = list(unique_facets)
         # The neighbour array is updated so it's not dirty anymore
