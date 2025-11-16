@@ -89,50 +89,90 @@ class PaintByNumbersPipeline:
         color_map_result = ColorReducer.create_color_map(clustered_data, width, height)
         update("Creating color map", 1.0)
 
-        # Stage 4: Narrow pixel strip cleanup (if enabled)
-        if settings.narrowPixelStripCleanupRuns > 0:
-            update("Cleaning narrow strips", 0.0)
-            for run in range(settings.narrowPixelStripCleanupRuns):
-                ColorReducer.process_narrow_pixel_strip_cleanup(color_map_result)
-                update("Cleaning narrow strips", (run + 1) / settings.narrowPixelStripCleanupRuns)
-
-        # Stage 5: Build facets
-        update("Building facets", 0.0)
+        # Stages 4-7: Facet building and reduction
+        # Important: If narrow pixel strip cleanup is enabled, we need to rebuild facets
+        # after each cleanup run because facet reduction updates the color indices
         facet_builder = FacetBuilder()
         facet_result = FacetResult()
         facet_result.width = width
         facet_result.height = height
         from paintbynumbers.structs.typed_arrays import Uint32Array2D
-        facet_result.facetMap = Uint32Array2D(width, height)
-        facet_result.facets = facet_builder.build_all_facets(
-            color_map_result.imgColorIndices,
-            width,
-            height,
-            facet_result
-        )
-        update("Building facets", 1.0)
 
-        # Stage 6: Build facet neighbors
-        update("Building neighbors", 0.0)
-        for i, facet in enumerate(facet_result.facets):
-            if facet is not None:
-                facet_builder.build_facet_neighbour(facet, facet_result)
-            if (i + 1) % 100 == 0:
-                update("Building neighbors", (i + 1) / len(facet_result.facets))
-        update("Building neighbors", 1.0)
-
-        # Stage 7: Reduce facets (if enabled)
-        if settings.removeFacetsSmallerThanNrOfPoints > 0 or (settings.maximumNumberOfFacets is not None and settings.maximumNumberOfFacets < len(facet_result.facets)):
-            update("Reducing facets", 0.0)
-            FacetReducer.reduce_facets(
-                settings.removeFacetsSmallerThanNrOfPoints,
-                settings.removeFacetsFromLargeToSmall,
-                settings.maximumNumberOfFacets,
-                color_map_result.colorsByIndex,
-                facet_result,
+        if settings.narrowPixelStripCleanupRuns == 0:
+            # No cleanup runs - just build facets once
+            update("Building facets", 0.0)
+            facet_result.facetMap = Uint32Array2D(width, height)
+            facet_result.facets = facet_builder.build_all_facets(
                 color_map_result.imgColorIndices,
-                on_update=lambda p: update("Reducing facets", p)
+                width,
+                height,
+                facet_result
             )
+            update("Building facets", 1.0)
+
+            # Build facet neighbors
+            update("Building neighbors", 0.0)
+            for i, facet in enumerate(facet_result.facets):
+                if facet is not None:
+                    facet_builder.build_facet_neighbour(facet, facet_result)
+                if (i + 1) % 100 == 0:
+                    update("Building neighbors", (i + 1) / len(facet_result.facets))
+            update("Building neighbors", 1.0)
+
+            # Reduce facets
+            if settings.removeFacetsSmallerThanNrOfPoints > 0 or (settings.maximumNumberOfFacets is not None and settings.maximumNumberOfFacets < len(facet_result.facets)):
+                update("Reducing facets", 0.0)
+                FacetReducer.reduce_facets(
+                    settings.removeFacetsSmallerThanNrOfPoints,
+                    settings.removeFacetsFromLargeToSmall,
+                    settings.maximumNumberOfFacets,
+                    color_map_result.colorsByIndex,
+                    facet_result,
+                    color_map_result.imgColorIndices,
+                    on_update=lambda p: update("Reducing facets", p)
+                )
+        else:
+            # Multiple cleanup runs - rebuild facets after each cleanup
+            # The color indices get updated during facet reduction, so we need to
+            # rebuild facets in each iteration to handle the updated color map
+            for run in range(settings.narrowPixelStripCleanupRuns):
+                # Stage 4: Narrow pixel strip cleanup
+                update("Cleaning narrow strips", 0.0)
+                ColorReducer.process_narrow_pixel_strip_cleanup(color_map_result)
+                update("Cleaning narrow strips", (run + 1) / settings.narrowPixelStripCleanupRuns)
+
+                # Stage 5: Build facets (rebuild each time)
+                update("Building facets", 0.0)
+                facet_result.facetMap = Uint32Array2D(width, height)
+                facet_result.facets = facet_builder.build_all_facets(
+                    color_map_result.imgColorIndices,
+                    width,
+                    height,
+                    facet_result
+                )
+                update("Building facets", 1.0)
+
+                # Stage 6: Build facet neighbors
+                update("Building neighbors", 0.0)
+                for i, facet in enumerate(facet_result.facets):
+                    if facet is not None:
+                        facet_builder.build_facet_neighbour(facet, facet_result)
+                    if (i + 1) % 100 == 0:
+                        update("Building neighbors", (i + 1) / len(facet_result.facets))
+                update("Building neighbors", 1.0)
+
+                # Stage 7: Reduce facets (updates color indices for next iteration)
+                if settings.removeFacetsSmallerThanNrOfPoints > 0 or (settings.maximumNumberOfFacets is not None and settings.maximumNumberOfFacets < len(facet_result.facets)):
+                    update("Reducing facets", 0.0)
+                    FacetReducer.reduce_facets(
+                        settings.removeFacetsSmallerThanNrOfPoints,
+                        settings.removeFacetsFromLargeToSmall,
+                        settings.maximumNumberOfFacets,
+                        color_map_result.colorsByIndex,
+                        facet_result,
+                        color_map_result.imgColorIndices,
+                        on_update=lambda p: update("Reducing facets", p)
+                    )
 
         # Stage 8: Trace borders
         update("Tracing borders", 0.0)
