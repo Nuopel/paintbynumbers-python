@@ -33,7 +33,8 @@ class SVGBuilder:
         stroke: bool = True,
         add_color_labels: bool = True,
         font_size: int = DEFAULT_FONT_SIZE,
-        font_color: str = DEFAULT_FONT_COLOR
+        font_color: str = DEFAULT_FONT_COLOR,
+        label_start_number: int = 0
     ) -> str:
         """Create SVG string from facet result.
 
@@ -46,6 +47,7 @@ class SVGBuilder:
             add_color_labels: Whether to add color number labels
             font_size: Font size for labels
             font_color: Color for label text
+            label_start_number: Starting number for labels (default: 0)
 
         Returns:
             SVG string content
@@ -110,7 +112,7 @@ class SVGBuilder:
 
             # Add label if requested
             if add_color_labels:
-                SVGBuilder._add_label(svg, f, font_size, font_color, size_multiplier)
+                SVGBuilder._add_label(svg, f, font_size, font_color, size_multiplier, label_start_number)
 
         # Convert to string
         return SVGBuilder._element_to_string(svg)
@@ -156,7 +158,8 @@ class SVGBuilder:
         facet,
         font_size: int,
         font_color: str,
-        size_multiplier: float
+        size_multiplier: float,
+        label_start_number: int = 0
     ) -> None:
         """Add color label to SVG.
 
@@ -166,13 +169,14 @@ class SVGBuilder:
             font_size: Font size
             font_color: Font color
             size_multiplier: Scale factor
+            label_start_number: Starting number for labels (default: 0)
         """
         # Calculate label position (center of label bounds)
         label_x = (facet.labelBounds.minX + facet.labelBounds.maxX) / 2
         label_y = (facet.labelBounds.minY + facet.labelBounds.maxY) / 2
 
         # Adjust font size based on number of digits
-        label_text = str(facet.color)
+        label_text = str(facet.color + label_start_number)
         nr_of_digits = len(label_text)
         adjusted_font_size = font_size / nr_of_digits
 

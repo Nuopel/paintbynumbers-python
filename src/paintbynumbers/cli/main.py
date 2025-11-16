@@ -119,6 +119,12 @@ def _progress_callback(stage: str, progress: float) -> None:
     help='Label font color (default: #000000)'
 )
 @click.option(
+    '--label-start-number',
+    type=int,
+    default=0,
+    help='Starting number for labels (default: 0)'
+)
+@click.option(
     '--seed',
     type=int,
     help='Random seed for reproducibility'
@@ -153,6 +159,7 @@ def main(
     scale: float,
     font_size: int,
     font_color: str,
+    label_start_number: int,
     seed: Optional[int],
     quiet: bool,
     save_config: Optional[str]
@@ -230,7 +237,8 @@ def main(
             svgFillFacets=fill_facets,
             svgSizeMultiplier=scale,
             svgFontSize=font_size,
-            svgFontColor=font_color
+            svgFontColor=font_color,
+            svgLabelStartNumber=label_start_number
         )
         settings.outputProfiles = [profile]
 
