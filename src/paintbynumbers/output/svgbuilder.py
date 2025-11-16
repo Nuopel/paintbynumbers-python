@@ -126,6 +126,8 @@ class SVGBuilder:
         Uses quadratic curves (Q command) for smooth, natural-looking paths
         by placing control points at midpoints between consecutive points.
 
+        OPTIMIZED: Uses list comprehension and join instead of string concatenation.
+
         Args:
             path: List of points forming the path
             size_multiplier: Scale factor
@@ -136,8 +138,8 @@ class SVGBuilder:
         if len(path) == 0:
             return ""
 
-        # Start with Move command
-        data = f"M {path[0].x * size_multiplier} {path[0].y * size_multiplier} "
+        # OPTIMIZED: Build path parts as list then join (much faster than string concatenation)
+        parts = [f"M {path[0].x * size_multiplier} {path[0].y * size_multiplier}"]
 
         # Add quadratic Bezier curves
         for i in range(1, len(path)):
@@ -146,13 +148,15 @@ class SVGBuilder:
             midpoint_y = (path[i].y + path[i - 1].y) / 2
 
             # Q control_x control_y end_x end_y
-            data += f"Q {midpoint_x * size_multiplier} {midpoint_y * size_multiplier} "
-            data += f"{path[i].x * size_multiplier} {path[i].y * size_multiplier} "
+            parts.append(
+                f"Q {midpoint_x * size_multiplier} {midpoint_y * size_multiplier} "
+                f"{path[i].x * size_multiplier} {path[i].y * size_multiplier}"
+            )
 
         # Close path
-        data += "Z"
+        parts.append("Z")
 
-        return data
+        return " ".join(parts)
 
     @staticmethod
     def _add_label(
