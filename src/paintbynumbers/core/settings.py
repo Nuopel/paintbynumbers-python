@@ -22,6 +22,7 @@ class OutputProfile:
     svgFillFacets: bool = True
     svgSizeMultiplier: float = 3.0
     svgFontSize: int = 20
+    svgMinFontSize: Optional[float] = None  # Minimum font size for labels (None = no minimum)
     svgFontColor: str = "#000000"
     svgBorderWidth: float = 1.0  # Width of borders/strokes in SVG
     svgLabelStartNumber: int = 0  # Starting number for labels (default 0)
@@ -140,6 +141,7 @@ class Settings:
                     "svgFillFacets": p.svgFillFacets,
                     "svgSizeMultiplier": p.svgSizeMultiplier,
                     "svgFontSize": p.svgFontSize,
+                    "svgMinFontSize": p.svgMinFontSize,
                     "svgFontColor": p.svgFontColor,
                     "svgBorderWidth": p.svgBorderWidth,
                     "svgLabelStartNumber": p.svgLabelStartNumber,

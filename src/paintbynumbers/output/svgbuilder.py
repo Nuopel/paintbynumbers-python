@@ -33,6 +33,7 @@ class SVGBuilder:
         stroke: bool = True,
         add_color_labels: bool = True,
         font_size: int = DEFAULT_FONT_SIZE,
+        min_font_size: Optional[float] = None,
         font_color: str = DEFAULT_FONT_COLOR,
         border_width: float = DEFAULT_STROKE_WIDTH,
         label_start_number: int = 0
@@ -47,6 +48,7 @@ class SVGBuilder:
             stroke: Whether to draw black border strokes
             add_color_labels: Whether to add color number labels
             font_size: Font size for labels
+            min_font_size: Minimum font size for labels (None = no minimum)
             font_color: Color for label text
             border_width: Width of the border strokes
             label_start_number: Starting number for labels (default: 0)
@@ -114,7 +116,7 @@ class SVGBuilder:
 
             # Add label if requested
             if add_color_labels:
-                SVGBuilder._add_label(svg, f, font_size, font_color, size_multiplier, label_start_number)
+                SVGBuilder._add_label(svg, f, font_size, min_font_size, font_color, size_multiplier, label_start_number)
 
         # Convert to string
         return SVGBuilder._element_to_string(svg)
@@ -159,6 +161,7 @@ class SVGBuilder:
         svg: ET.Element,
         facet,
         font_size: int,
+        min_font_size: Optional[float],
         font_color: str,
         size_multiplier: float,
         label_start_number: int = 0
@@ -169,6 +172,7 @@ class SVGBuilder:
             svg: Parent SVG element
             facet: Facet to add label for
             font_size: Font size
+            min_font_size: Minimum font size (None = no minimum)
             font_color: Font color
             size_multiplier: Scale factor
             label_start_number: Starting number for labels (default: 0)
@@ -192,6 +196,10 @@ class SVGBuilder:
         # The factor 0.4 ensures the text takes up roughly 40% of the available space
         space_based_font_size = available_space * 0.4
         final_font_size = min(adjusted_font_size, space_based_font_size)
+
+        # Apply minimum font size if specified
+        if min_font_size is not None:
+            final_font_size = max(final_font_size, min_font_size)
 
         # Create text element
         text = ET.SubElement(svg, 'text')
