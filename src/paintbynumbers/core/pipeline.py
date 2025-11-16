@@ -177,7 +177,8 @@ class PaintByNumbersPipeline:
             add_color_labels=profile.svgShowLabels,
             font_size=profile.svgFontSize,
             font_color=profile.svgFontColor,
-            border_width=profile.svgBorderWidth
+            border_width=profile.svgBorderWidth,
+            label_start_number=profile.svgLabelStartNumber
         )
         update("Generating SVG", 1.0)
 

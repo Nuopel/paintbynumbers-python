@@ -125,6 +125,12 @@ def _progress_callback(stage: str, progress: float) -> None:
     help='Border/stroke width in SVG (default: 1.0)'
 )
 @click.option(
+    '--label-start-number',
+    type=int,
+    default=0,
+    help='Starting number for labels (default: 0)'
+)
+@click.option(
     '--seed',
     type=int,
     help='Random seed for reproducibility'
@@ -160,6 +166,7 @@ def main(
     font_size: int,
     font_color: str,
     border_width: float,
+    label_start_number: int,
     seed: Optional[int],
     quiet: bool,
     save_config: Optional[str]
@@ -238,7 +245,8 @@ def main(
             svgSizeMultiplier=scale,
             svgFontSize=font_size,
             svgFontColor=font_color,
-            svgBorderWidth=border_width
+            svgBorderWidth=border_width,
+            svgLabelStartNumber=label_start_number
         )
         settings.outputProfiles = [profile]
 

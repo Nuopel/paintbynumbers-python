@@ -24,6 +24,7 @@ class OutputProfile:
     svgFontSize: int = 20
     svgFontColor: str = "#000000"
     svgBorderWidth: float = 1.0  # Width of borders/strokes in SVG
+    svgLabelStartNumber: int = 0  # Starting number for labels (default 0)
     filetypeQuality: float = 0.92  # For JPEG quality
 
 
@@ -74,7 +75,8 @@ class Settings:
             svgSizeMultiplier=3.0,
             svgFontSize=20,
             svgFontColor="#000000",
-            svgBorderWidth=1.0
+            svgBorderWidth=1.0,
+            svgLabelStartNumber=0
         )
     ])
 
@@ -140,6 +142,7 @@ class Settings:
                     "svgFontSize": p.svgFontSize,
                     "svgFontColor": p.svgFontColor,
                     "svgBorderWidth": p.svgBorderWidth,
+                    "svgLabelStartNumber": p.svgLabelStartNumber,
                     "filetypeQuality": p.filetypeQuality,
                 }
                 for p in self.outputProfiles
